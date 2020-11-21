@@ -3,13 +3,14 @@ This project aims to create a model that predicts EMS calls to better allocate a
 
 # TASK LIST #
 
-1) initial planning
+- read throught chapters on predictive policing and the rideshare labs/chapters
 
 
 
 # MEETING NOTES #
-Friday, November 20
+Sat, November 21
 - project planning
+- 
 
 
 # Initial Questionnaire #
