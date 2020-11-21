@@ -12,6 +12,8 @@ main_ems.sf <- main_ems %>%
   st_transform('EPSG:6595')
 #mapview::mapview(main_ems.sf)
 
+
+
 ### make additional columns (delays, etc.)
 ### make it sf object
 ### fishnet

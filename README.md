@@ -3,14 +3,17 @@ This project aims to create a model that predicts EMS calls to better allocate a
 
 # TASK LIST #
 
-- read throught chapters on predictive policing and the rideshare labs/chapters
-
+- read through chapters on predictive policing and the rideshare labs/chapters
+- David: census, BLS data, start on fishnet coding.
+- Al Jalil: fire/hospital, isochrones for hospitals and and EMS, health outcomes data loading
+- NEXT MEETING: MONDAY, NOV 23, 9pm
 
 
 # MEETING NOTES #
 Sat, November 21
 - project planning
-- 
+- initial coding and data loading.
+
 
 
 # Initial Questionnaire #
