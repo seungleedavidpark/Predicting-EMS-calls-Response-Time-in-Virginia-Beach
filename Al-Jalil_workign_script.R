@@ -21,3 +21,12 @@
 ##### 6. Cross Validation #####
 ### to think about whether to cross validate over neighborhoods or census tracts
 ### temporal and spatial CV 
+
+library(dplyr)
+library(tidygeocoder)
+library(sf)
+library(leaflet)
+library(leaflet)
+
+ems_locations <- st_read('201127_ems_geocoded.shp')
+mapview(ems_locations)
