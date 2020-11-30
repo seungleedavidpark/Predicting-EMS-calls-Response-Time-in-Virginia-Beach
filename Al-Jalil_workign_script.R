@@ -87,7 +87,8 @@ vb_census <-
          PubCommute = B08301_010E,
          TotalHispanic = B03002_012E,
          MedInc = B19326_001E,
-         TotalHH = B07013_001E) %>%
+         TotalHH = B07013_001E)
+vb_census <- vb_census %>%
   dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
   mutate(Area = st_area(vb_census),
          pctWhite = (ifelse(Race_TotalPop > 0, Whites / Race_TotalPop,0))*100,
@@ -118,98 +119,129 @@ vb_health <- merge(health_dat, vb_census,
 
 hospitals <- st_read('Hospitals__Virginia_.shp') %>% 
   dplyr::filter(City == 'Virginia Beach')
+mapview(hospitals)
 
-hospital_iso <- mb_isochrone(hospitals, #this can be an sf object or a number as coordinates
-                             profile = "driving", #isocromes are assuming free of traffic
-                             time = c(5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60),
-                             access_token = my_token) #this can either be a single number, or a series of numbers in minutes
-
-mapview(hospital_iso)
-
-mapbox_map <- leaflet() %>%
-  addMapboxTiles(style_id = "streets-v11", #AddMapboxTiles converts vector tiles into raster tiles
-                 username = "mapbox",
-                 access_token = my_token) #username is not your username, but "mapbox"
-
-mapbox_map
-mapbox_map %>%
-  addPolygons(data = hospital_iso,
-              color = rev(colors_12),
-              fillColor = rev(colors_12),
-              fillOpacity = 0.01, 
-              opacity = .01, 
-              weight = 0.2) %>%
-  addLegend(labels = c(5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60),
-            colors = colors_12,
-            title = "Drive-time<br/>around Hospitals") 
+fire_stations <- st_read('Fire_Stations.shp') %>% 
+  dplyr::filter(CITY == 'Virginia Beach')
+mapview(fire_stations)
 
 
-isos <- mb_isochrone(
-  location = "1 NRG Pkwy, Houston, TX 77054",
-  profile = "driving",
-  time = 1:45
-)
+#--- david_script
 
-pal <- colorNumeric("viridis", isos$time, na.color = "transparent") #generates a series of colors
+main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
+main_ems.sf <- main_ems %>%
+  na.omit() %>%
+  st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+  st_transform('EPSG:6595')
+mapview::mapview(main_ems.sf)
 
-#this shows accessibility to the polling droop-off location
-mapbox_map %>%
-  addPolygons(data = isos,
-              fillColor = ~pal(time),
-              stroke = FALSE,
-              fillOpacity = 0.1) %>%
-  addLegend(values = isos$time,
-            pal = pal,
-            title = "Drive-time to NRG Arena")
+### make additional columns (delays, etc.)
+### fishnet
+vb_boundary <-
+  st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
+  st_transform('EPSG:6595')
 
-##making an "accessibility surface"
+mapview::mapview(vb_boundary)
 
-#fasterize takes a dataset,and a fucntion, and will generate a raster dataset from a vector dataset
-library(fasterize)
-library(sf)
+vb_fishnet <- 
+  st_make_grid(vb_boundary,
+               cellsize = 1000, 
+               square = TRUE) %>%
+  .[vb_boundary] %>% 
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
 
-isos_proj <- st_transform(isos, 32615) #changes the projection system
+vb_ems_fishnet <- 
+  dplyr::select(main_ems.sf) %>%    
+  mutate(countEMS = 1) %>%    
+  aggregate(., vb_fishnet, sum) %>%    
+  mutate(countEMS = replace_na(countEMS, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24),          
+                       size=nrow(vb_fishnet), replace = TRUE))
 
-template <- raster(isos_proj, resolution = 100) #creates a 100mx100m black cell template
-
-iso_surface <- fasterize(isos_proj, template, field = "time", fun = "min")
-
-mapbox_map %>%
-  addRasterImage(iso_surface, colors = pal, opacity = 0.5) %>%
-  addLegend(values = isos$time, pal = pal,
-            title = "Drive-time to NRG Arena")
-
-## Identifying populations that may have a difficult time voting
-
-# sf: sf, which stands for simple features, has cemented itself in the last couple years as the 
-#   core package for vector-based spatial data representation and analysis in R. Spatial data are 
-#   represented with sf much like regular R data frames, but with a list-column representing the 
-#   geometry of each row.
-# tidyverse: A collection of popular R packages maintained by RStudio that work together to facilitate 
-#   data representation, wrangling, and visualization.
-# tidycensus: An R package for downloading and working with data from the US Census Bureau's decennial 
-#   Census, American Community Survey (aggregate and microdata), and Population Estimates program. I first 
-#   wrote this package three years ago because I grew tired of the tedious process of downloading 
-#   Census data, cleaning it, and joining to shapefiles to do spatial analysis. tidycensus does all 
-#   this for you internally with the ability to return Census and ACS data as simple features objects 
-#   ready for mapping and analysis.
-
-#download early voding sites, in C:\Users\gault\OneDrive\UPenn\Third Semester\Public Policy Analytics\Masterclass\data
-
-library(tidyverse)
-library(tidycensus)
-
-ev_sites <- read_rds("tarrant_EV_sites.rds")
-
-walking_isos <- mb_isochrone(
-  ev_sites,
-  profile = "walking",
-  time = 20,
-  id = "name" #name is a column that identifies the name of the polling place
-)
-
-mapbox_map %>%
-  addPolygons(data = walking_isos,
-              popup = ~id)
+ggplot() +
+  geom_sf(data = vb_ems_fishnet, aes(fill = countEMS), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Fishnet of EMS calls in Virginia Beach")
 
 
+PopDens_net <- 
+  dplyr::select(tracts18) %>% #what does it mean to dplyr::select(traffic_crashes)? I thought this was for selecting columns?
+  mutate(PopDens = as.numeric(tracts18$PopDens)) %>% #why do we say countCrashes = 1? shouldnt it be equal to an aggregate sum?
+  aggregate(., fishnet, mean) %>%
+  mutate(PopDens = replace_na(PopDens, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+
+##### 2.load additional datasets #####
+### census (pop_density, med_age, race, poverty, income, education)
+selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
+                   "B02001_002E", # People describing themselves as "white alone"
+                   "B02001_003E", # People describing themselves as "black" or "african-american" alone
+                   "B15001_050E", # Females with bachelors degrees
+                   "B15001_009E", # Males with bachelors degrees
+                   "B19013_001E", # Median HH income
+                   "B25058_001E", # Median rent
+                   "B06012_002E", # Total poverty
+                   "B08301_001E", # People who have means of transportation to work
+                   "B08301_002E", # Total people who commute by car, truck, or van
+                   "B08301_010E", # Total people who commute by public transportation"
+                   "B03002_012E", # Estimate Total Hispanic or Latino by race
+                   "B19326_001E", # Median income in past 12 months (inflation-adjusted)
+                   "B07013_001E", # Total households
+                   "B08013_001E",
+                   "B01002_001E")
+
+vb_census <- 
+  get_acs(geography = "tract", 
+          variables = selected_vars, 
+          year=2018, 
+          state="VA",
+          county = c("Virginia Beach"),
+          geometry=T, 
+          output="wide") %>%
+  #st_transform('ESRI:102658') %>%
+  rename(Med_Age = B01002_001E,
+         TotalPop = B02001_001E, 
+         Whites = B02001_002E,
+         Blacks = B02001_003E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E,
+         TotalPoverty = B06012_002E,
+         TotalCommute = B08301_001E,
+         CarCommute = B08301_002E,
+         PubCommute = B08301_010E,
+         TotalHispanic = B03002_012E,
+         MedInc = B19326_001E,
+         TotalHH = B07013_001E) %>%
+  dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
+  mutate(pctWhite = (ifelse(TotalPop > 0, Whites / TotalPop,0))*100,
+         pctBlack = (ifelse(TotalPop > 0, Blacks / TotalPop,0))*100,
+         pctHis = (ifelse(TotalPop >0, TotalHispanic/TotalPop,0))*100,
+         pctBachelors = (ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0)) *100,
+         pctPoverty = (ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0))*100,
+         pctCarCommute = (ifelse(TotalCommute > 0, CarCommute / TotalCommute,0))*100,
+         pctPubCommute = (ifelse(TotalCommute > 0, PubCommute / TotalCommute,0))*100,
+         year = "2018") %>%
+  mutate(MedHHInc = replace_na(MedHHInc, 0),
+         pctBachelors= replace_na(pctBachelors,0),
+         pctHis= replace_na(pctHis,0),
+         pctCarCommute= replace_na(pctCarCommute,0)) %>%
+  dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
+
+### weather data
+vb_weather <- 
+  riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2017-08-15") %>%
+  dplyr::select(valid, tmpf, p01i, sknt, relh)%>%
+  replace(is.na(.), 0) %>%
+  #mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+  #mutate(week = week(interval60),
+  #dotw = wday(interval60, label=TRUE)) %>%
+  #group_by(interval60) %>%
+  summarize(Temperature = max(tmpf),
+            Precipitation = sum(p01i),
+            Wind_Speed = max(sknt),
+            Humidity = max(relh)) %>%
+  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
