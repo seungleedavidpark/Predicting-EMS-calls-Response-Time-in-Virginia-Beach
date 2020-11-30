@@ -35,6 +35,78 @@ library(riem)
 library(measurements)
 library(mapboxapi)
 
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.text.x = element_text(size = 14))
+}
+
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <-
+    as.matrix(measureFrom)
+  measureTo_Matrix <-
+    as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+
 my_token <- "pk.eyJ1IjoiZ2F1bHQzNCIsImEiOiJja2ZsbWd5cm8xNDBsMnlwajMzbW15c2Y0In0.nZ9siGKFAjMx_JQVEzeOtg"
 mb_access_token(my_token, install = TRUE, overwrite = TRUE) #install = True installs your token so you dont have to keep loading your token
 
@@ -167,13 +239,32 @@ ggplot() +
 
 
 PopDens_net <- 
-  dplyr::select(tracts18) %>% #what does it mean to dplyr::select(traffic_crashes)? I thought this was for selecting columns?
-  mutate(PopDens = as.numeric(tracts18$PopDens)) %>% #why do we say countCrashes = 1? shouldnt it be equal to an aggregate sum?
-  aggregate(., fishnet, mean) %>%
+  dplyr::select(vb_census) %>% #what does it mean to dplyr::select(traffic_crashes)? I thought this was for selecting columns?
+  mutate(PopDens = as.numeric(vb_census$PopDens)) %>% #why do we say countCrashes = 1? shouldnt it be equal to an aggregate sum?
+  aggregate(., vb_fishnet, mean) %>%
   mutate(PopDens = replace_na(PopDens, 0),
          uniqueID = rownames(.),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
 
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = NA) +
+  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
+  labs(title= "Population Density across Virginia Beach") +
+  mapTheme()
+
+heart_disease_net <-
+  dplyr::select(vb_health) %>% 
+  mutate(CHD_CrudePrev = as.numeric(vb_health$CHD_CrudePrev)) %>% 
+  aggregate(., vb_fishnet, mean) %>%
+  mutate(CHD_CrudePrev = replace_na(CHD_CrudePrev, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = NA) +
+  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
+  labs(title= "PPrevalance of Heart Disease across Virginia Beach") +
+  mapTheme()
 ##### 2.load additional datasets #####
 ### census (pop_density, med_age, race, poverty, income, education)
 selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
