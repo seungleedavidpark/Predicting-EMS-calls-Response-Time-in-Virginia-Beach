@@ -5,6 +5,8 @@ library(sf)
 library(mapview)
 library(viridis)
 library(riem)
+library(lubridate)
+library(gridExtra)
 
 ##### 1.load and format the VB dataset ####
 #load main dataset and make it an SF object
@@ -14,6 +16,22 @@ main_ems.sf <- main_ems %>%
   st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
   st_transform('EPSG:6595')
 #mapview::mapview(main_ems.sf)
+
+### create time bins (30 min and 60 min)
+main_ems.sf <- main_ems.sf %>%
+  mutate(interval60 = floor_date(mdy_hm(CallDateandTime), unit = "60 mins"),
+         interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE))
+
+### create time duration from "CallDateandTime" to "OnSceneDateandTime" and "time_of_day" column
+main_ems.sf <- main_ems.sf %>%
+  mutate(Call_to_OnScene =  difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "secs")) %>%
+  mutate(time_of_day = case_when(hour(interval60) >= 0 | hour(interval60) > 6 ~ "Overnight",
+                                 hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
+                                 hour(interval60) >= 12 & hour(interval60) < 18 ~ "Afternoon",
+                                 hour(interval60) >= 18 & hour(interval60) <= 24 ~ "Evening"))
+
 
 ### make additional columns (delays, etc.)
 ### fishnet
@@ -26,7 +44,7 @@ mapview::mapview(vb_boundary)
 vb_fishnet <- 
   st_make_grid(vb_boundary,
                cellsize = 1000, 
-               square = TRUE) %>%
+               square = FALSE) %>%
   .[vb_boundary] %>% 
   st_sf() %>%
   mutate(uniqueID = rownames(.))
@@ -102,20 +120,29 @@ vb_census <-
          pctCarCommute= replace_na(pctCarCommute,0)) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
-### weather data
+### load weather data
 vb_weather <- 
   riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2017-08-15") %>%
   dplyr::select(valid, tmpf, p01i, sknt, relh)%>%
   replace(is.na(.), 0) %>%
-  #mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
-  #mutate(week = week(interval60),
-         #dotw = wday(interval60, label=TRUE)) %>%
-  #group_by(interval60) %>%
+  mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  group_by(interval60) %>%
   summarize(Temperature = max(tmpf),
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt),
             Humidity = max(relh)) %>%
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
+grid.arrange(
+  ggplot(vb_weather, aes(interval60,Precipitation)) + geom_line(aes(),) + 
+    labs(title="Percipitation", x="Hour", y="Perecipitation") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Temperature)) + geom_line(aes(),) + 
+    labs(title="Temperature", x="Hour", y="Temperature") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Humidity)) + geom_line(aes(),) + 
+    labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none"),
+  top="Weather Data - Virginia Beach - January to August, 2017")
 
 ### nearest neighbor?
 
