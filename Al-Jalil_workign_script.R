@@ -219,7 +219,6 @@ vb_fishnet <-
   st_make_grid(vb_boundary,
                cellsize = 1000, 
                square = TRUE) %>%
-  .[vb_boundary] %>% 
   st_sf() %>%
   mutate(uniqueID = rownames(.))
 
@@ -252,12 +251,16 @@ ggplot() +
   labs(title= "Population Density across Virginia Beach") +
   mapTheme()
 
+vb_health_census <- merge(health_dat, vb_census,
+                   by.x = "GEOID", by.y = "GEOID",
+                   all.x = TRUE, all.y = TRUE,
+                   sort = FALSE) 
+
 heart_disease_net <-
-  dplyr::select(vb_health) %>% 
-  mutate(CHD_CrudePrev = as.numeric(vb_health$CHD_CrudePrev)) %>% 
+  dplyr::select(vb_health_census) %>% 
+  mutate(CHD_CrudePrev = ifelse(is.na(vb_health_census$CHD_CrudePrev),0,vb_health_census$CHD_CrudePrev)) %>%
   aggregate(., vb_fishnet, mean) %>%
-  mutate(CHD_CrudePrev = replace_na(CHD_CrudePrev, 0),
-         uniqueID = rownames(.),
+  mutate(uniqueID = rownames(.),
          cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
 
 ggplot() + 
@@ -265,6 +268,7 @@ ggplot() +
   geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
   labs(title= "PPrevalance of Heart Disease across Virginia Beach") +
   mapTheme()
+
 ##### 2.load additional datasets #####
 ### census (pop_density, med_age, race, poverty, income, education)
 selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
