@@ -32,7 +32,7 @@ plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    axis.ticks=element_blank())
 
 mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
-                  plot.title =element_text(size=10),
+                  plot.title =element_text(size=12),
                   plot.subtitle = element_text(size=7),
                   plot.caption = element_text(size = 5),
                   axis.line=element_blank(),
@@ -122,6 +122,11 @@ vb_boundary <-
   st_transform('EPSG:6595')
 
 mapview::mapview(vb_boundary)
+
+vb_tracts <- 
+  st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
+  subset(OBJECTID!= 22) %>%
+  st_transform('EPSG:6595')
 
 vb_fishnet <- 
   st_make_grid(vb_boundary,
@@ -327,7 +332,58 @@ ggplot() +
   geom_sf(data = vb_boundary, fill = NA) +
   geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
   labs(title= "Population Density across Virginia Beach") +
-  mapTheme()
+  mapTheme
+
+ggplot() +
+  geom_sf(data = vb_tracts, fill = NA) +
+  geom_sf(data = vb_census, aes(fill = Med_Age)) +
+  mapTheme
+
+### map med age fishnet
+MedAge_net <- 
+  dplyr::select(vb_census) %>% #what does it mean to dplyr::select(traffic_crashes)? I thought this was for selecting columns?
+  mutate(Med_Age = as.numeric(vb_census$Med_Age)) %>% #why do we say countCrashes = 1? shouldnt it be equal to an aggregate sum?
+  aggregate(., vb_fishnet, mean) %>%
+  mutate(Med_Age = replace_na(Med_Age, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = NA) +
+  geom_sf(data = MedAge_net, color = NA, aes(fill = Med_Age)) +
+  labs(title= "Median Age across Virginia Beach") +
+  mapTheme
+
+### map health disease fishnet
+heart_disease_net <-
+  vb_health %>%
+  st_sf() %>%
+  mutate(CHD_CrudePrev = ifelse(is.na(vb_health$CHD_CrudePrev),0,vb_health$CHD_CrudePrev)) %>%
+  dplyr::select(CHD_CrudePrev) %>% 
+  aggregate(., vb_fishnet, mean)
+
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = NA) +
+  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
+  labs(title= "Prevalance of Heart Disease across Virginia Beach") +
+  mapTheme
+
+tracts_mapping <- 
+  vb_health %>%
+  st_sf() %>%
+  mutate(CHD_CrudePrev = ifelse(is.na(vb_health$CHD_CrudePrev),0,vb_health$CHD_CrudePrev))
+
+#interpolate from tracts to fishnet. Look up the `extensive` parameter.
+tracts_fishnet <-
+  dplyr::select(tracts_mapping, CHD_CrudePrev) %>%
+  st_interpolate_aw(., vb_fishnet, extensive = TRUE)
+
+#map
+grid.arrange(
+  ggplot() + geom_sf(data=tracts_mapping, aes(fill = CHD_CrudePrev)) + ggtitle("Tracts"),
+  ggplot() + geom_sf(data=tracts_fishnet, aes(fill = CHD_CrudePrev), colour=NA) + ggtitle("Grid cells"), 
+  ncol=2)
+
 
 ##### 4. test for spatial process and correlations #####
 ### local moran's I
