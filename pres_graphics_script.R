@@ -1,11 +1,28 @@
+##### 0. Set up ######
+library(tidyverse)
+library(tidycensus)
+library(dplyr)
+library(sf)
+library(mapview)
+library(viridis)
+library(riem)
+library(lubridate)
+library(gridExtra)
+library(leaflet)
+library(shiny)
+library(mapboxapi)
+library(riem)
+library(measurements)
+library(mapboxapi)
+
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    plot.title =element_text(size=12),
                    plot.subtitle = element_text(size=8),
                    plot.caption = element_text(size = 6),
                    axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
-                   axis.title.x = element_text(size = 10),
+                   axis.title.x = element_text(size = 12),
                    axis.text.y = element_text(size = 8),
-                   axis.title.y = element_text(size = 10),
+                   axis.title.y = element_text(size = 12),
                    # Set the entire chart region to blank
                    panel.background=element_blank(),
                    plot.background=element_blank(),
@@ -33,6 +50,47 @@ mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                   plot.margin = margin(1, 1, 1, 1, 'cm'),
                   legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
 
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <-
+    as.matrix(measureFrom)
+  measureTo_Matrix <-
+    as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+
+palette5 <- c("#03254c","#1167b1","#187bcd","#2a9df4","#d0efff")
+palette4 <- c("#3a7d7c","#ffa137","#ff4400","#065125")
+palette2 <- c("#03254c","#187bcd")
+palette1 <- c("#03254c")
+
+my_token <- "pk.eyJ1IjoiZ2F1bHQzNCIsImEiOiJja2ZsbWd5cm8xNDBsMnlwajMzbW15c2Y0In0.nZ9siGKFAjMx_JQVEzeOtg"
 
 #load main dataset and make it an SF object
 main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
@@ -75,11 +133,48 @@ vol_count_dat <- main_ems.sf %>%
 main_ems.sf <-
   left_join(main_ems.sf, vol_count_dat, by="Date_time")
 
-###
+### 
 
 ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
   geom_point(size = .75, colour = "darkblue") +
   plotTheme
+
+
+### create fishnet
+vb_boundary <-
+  st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
+  st_transform('EPSG:6595')
+
+mapview::mapview(vb_boundary)
+
+vb_tracts <- 
+  st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
+  subset(OBJECTID!= 22) %>%
+  st_transform('EPSG:6595')
+
+vb_fishnet <- 
+  st_make_grid(vb_boundary,
+               cellsize = 1000, 
+               square = FALSE) %>%
+  .[vb_boundary] %>% 
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+
+### create EMS calls on fishnet
+vb_ems_fishnet <- 
+  dplyr::select(main_ems.sf) %>%    
+  mutate(countEMS = 1) %>%    
+  aggregate(., vb_fishnet, sum) %>%    
+  mutate(countEMS = replace_na(countEMS, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24),          
+                       size=nrow(vb_fishnet), replace = TRUE))
+
+ggplot() +
+  geom_sf(data = vb_ems_fishnet, aes(fill = countEMS), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Fishnet of EMS calls in Virginia Beach")
 
 
 ####mapping all calls response time#######
@@ -160,14 +255,22 @@ ggplot() +
 
 
 # weekend vs weekday response time
-
-ggplot(data = main_ems.sf, aes(x=ResponseTime, y=dotw, fill = time_of_day))+
-  geom_bar(stat="identity", position=position_dodge())+
-  labs(title="Response Time of EMS calls by days of the week and time of the week",
+ggplot(data = main_ems.sf %>%
+         group_by(dotw, time_of_day) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=meanResponeTime, y=dotw, fill = time_of_day), stat="identity", position=position_dodge())+
+  scale_fill_manual(values = palette5) +
+  labs(title="Response Time of EMS calls by days of the week and time of the day",
        x="ResponseTime", 
        y="Day of the week")+
   plotTheme
 
+
+ggplot(data = main_ems.sf %>%
+         group_by(CallPriority) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=CallPriority, y=meanResponeTime, fill=CallPriority), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  plotTheme
 
 
 
@@ -184,7 +287,10 @@ vb_weather <-
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt),
             Humidity = max(relh)) %>%
-  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature)) %>%
+  mutate(SnowPresent = ifelse(Precipitation > 0.0 & Temperature < 32.0, "Snow", "NoSnow"),
+         HeavyRain = ifelse(Precipitation > 0.5, "HeavyRain", "NoHeavyRain"))
+
 
 ##### plot weather data
 grid.arrange(
@@ -226,16 +332,55 @@ grid.arrange(
     plotTheme
 )
 
-
+grid.arrange(
+  ggplot(data = main_ems.sf %>%
+         group_by(SnowPresent) %>%
+         drop_na(SnowPresent) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=SnowPresent, y=meanResponeTime, fill=SnowPresent), stat="identity", position=position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = palette2) + 
+    plotTheme,
+    ggplot(data = main_ems.sf %>%
+             group_by(HeavyRain) %>%
+             drop_na(HeavyRain) %>%
+             summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+      geom_bar(aes(x=HeavyRain, y=meanResponeTime, fill=HeavyRain), stat="identity", position=position_dodge(), show.legend = FALSE) +
+      scale_fill_manual(values = palette2) + 
+      plotTheme
+)
 
 #distance to ems stations and response time
-ems_stations_points <- ems_stations %>%
-  st_centroid()
 
-vb_ems_fishnet$ems_stations_distance =
-  st_distance(st_centroid(vb_ems_fishnet),old_city_point) %>%
-  as.numeric()
+ems_stations <- st_read('201127_ems_geocoded.shp') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(OBJECTID = osm_id) %>%
+  mutate(Legend = "ems_stations")
+
+hospitals <- st_read('Hospitals__Virginia_.shp') %>% 
+  dplyr::filter(City == 'Virginia Beach') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(Legend = "hospitals")
+#mapview(hospitals)
+
+fire_stations <- st_read('Fire_Stations.shp') %>% 
+  dplyr::filter(CITY == 'Virginia Beach') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(Legend = "fire_stations")
+
+vars_net <- 
+  ems_stations %>%
+  st_join(., vb_fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(OBJECTID, Legend) %>%
+  summarize(count = n()) %>%
+  full_join(vb_fishnet, by = "OBJECTID") %>%
+  spread(Legend, count, fill=0) %>%
+  st_sf() %>%
+  dplyr::select(-`<NA>`) %>%
+  na.omit() %>%
+  ungroup()
+
 
 ems_station_nn = 
-  nn_function(st_c(st_coid(vars_net)), stc_illegal_dumping, 3),
+  nn_function(st_coordinates(st_centroid(vb_fishnet)), ems_stations, 1)
 
