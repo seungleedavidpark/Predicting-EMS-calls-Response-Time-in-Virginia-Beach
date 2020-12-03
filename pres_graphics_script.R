@@ -47,7 +47,7 @@ main_ems.sf <- main_ems.sf %>%
          interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
          week = week(interval60),
          dotw = wday(interval60, label=TRUE)) %>%
-  mutate(ResponseTime =  difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min")) %>%
+  mutate(ResponseTime =  as.numeric(difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min"))) %>%
   mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
                                  hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
                                  hour(interval60) >= 12 & hour(interval60) < 18 ~ "Afternoon",
@@ -170,4 +170,72 @@ ggplot(data = main_ems.sf, aes(x=ResponseTime, y=dotw, fill = time_of_day))+
 
 
 
+
+### 2.2 Load weather data
+vb_weather <- 
+  riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2018-03-01") %>%
+  dplyr::select(valid, tmpf, p01i, sknt, relh)%>%
+  replace(is.na(.), 0) %>%
+  mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  group_by(interval60) %>%
+  summarize(Temperature = max(tmpf),
+            Precipitation = sum(p01i),
+            Wind_Speed = max(sknt),
+            Humidity = max(relh)) %>%
+  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
+##### plot weather data
+grid.arrange(
+  ggplot(vb_weather, aes(interval60,Precipitation)) + geom_line(aes(),) + 
+    labs(title="Percipitation", x="Hour", y="Perecipitation") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Temperature)) + geom_line(aes(),) + 
+    labs(title="Temperature", x="Hour", y="Temperature") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Humidity)) + geom_line(aes(),) + 
+    labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none"),
+  top="Weather Data - Virginia Beach - January to August, 2017")
+
+main_ems.sf <-
+  left_join(main_ems.sf, vb_weather, by="interval60")
+
+#precipitation and response time
+ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+#temperature and response time
+ggplot(main_ems.sf, aes(x=Temperature, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+#wind speed and response time
+ggplot(main_ems.sf, aes(x=Wind_Speed, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+grid.arrange(
+  ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme,
+  ggplot(main_ems.sf, aes(x=Temperature, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme,
+  ggplot(main_ems.sf, aes(x=Wind_Speed, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme
+)
+
+
+
+#distance to ems stations and response time
+ems_stations_points <- ems_stations %>%
+  st_centroid()
+
+vb_ems_fishnet$ems_stations_distance =
+  st_distance(st_centroid(vb_ems_fishnet),old_city_point) %>%
+  as.numeric()
+
+ems_station_nn = 
+  nn_function(st_c(st_coid(vars_net)), stc_illegal_dumping, 3),
 
