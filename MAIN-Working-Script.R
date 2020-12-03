@@ -110,7 +110,7 @@ main_ems.sf <- main_ems.sf %>%
 
 ### create time duration from "CallDateandTime" to "OnSceneDateandTime" and "time_of_day" column
 main_ems.sf <- main_ems.sf %>%
-  mutate(Call_to_OnScene =  difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "secs")) %>%
+  mutate(Call_to_OnScene =  difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min")) %>%
   mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
                                  hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
                                  hour(interval60) >= 12 & hour(interval60) < 18 ~ "Afternoon",
@@ -151,6 +151,36 @@ ggplot() +
   geom_sf(data = vb_ems_fishnet, aes(fill = countEMS), color = NA) +
   scale_fill_viridis() +
   labs(title = "Fishnet of EMS calls in Virginia Beach")
+
+test <- main_ems.sf %>%
+  dplyr::filter(dotw == "Mon")
+  
+
+test_net <- 
+  dplyr::select(test) %>% 
+  mutate(Call_to_OnScene = as.numeric(test$Call_to_OnScene)) %>% 
+  aggregate(., vb_fishnet, mean) %>%
+  mutate(Call_to_OnScene = replace_na(Call_to_OnScene, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+
+
+Call_to_OnScene_net <- 
+  dplyr::select(test) %>% 
+  mutate(Call_to_OnScene = (test$Call_to_OnScene)) %>% 
+  aggregate(., vb_fishnet, mean) %>%
+  mutate(Call_to_OnScene = replace_na(Call_to_OnScene, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = test_net %>%
+            dplyr::filter(Call_to_OnScene > 0), color = NA, aes(fill = Call_to_OnScene)) +
+  scale_fill_viridis_c() +
+  geom_sf(data = ems_stations, color="white") +
+  labs(title= "call to Scene on mondays") +
+  mapTheme
 
 ##### 2.Load additional datasets #####
 ### 2.1 Load census (pop_density, med_age, race, poverty, income, education, commute)
@@ -262,20 +292,6 @@ intersections <- st_read("https://opendata.arcgis.com/datasets/e61e0e16ed01403bb
   mutate(Legend = "intersections")
 mapview(intersections)
 
-
-vars_net <- 
-  rbind(ems_stations, hospitals, fire_stations, intersections) %>%
-  st_join(., vb_fishnet, join=st_within) %>%
-  st_drop_geometry() %>%
-  group_by(uniqueID, Legend) %>%
-  summarize(count = n()) %>%
-  full_join(vb_fishnet, by = "uniqueID") %>%
-  spread(Legend, count, fill=0) %>%
-  st_sf() %>%
-  dplyr::select(-`<NA>`) %>%
-  na.omit() %>%
-  ungroup()
-
 ### 2.4 load health data
 health_dat <- read.csv('health_data_500_cities_vabch.csv') %>% 
   dplyr::select(TractFIPS, ends_with('CrudePrev')) %>% 
@@ -289,6 +305,7 @@ vb_health <- merge(health_dat, vb_census,
 
 
 ##### 3. exploratory analysis ####
+### EMS calls distributions
 ggplot(main_ems.sf %>%
          group_by(interval60) %>%
          tally()) +
@@ -299,6 +316,7 @@ ggplot(main_ems.sf %>%
   plotTheme() +
   theme(legend.position = "none")
 
+### ems calls by time of day (need work)
 main_ems.sf %>%
   group_by(EMSCallNumber, time_of_day) %>%
   tally()%>%
@@ -354,7 +372,7 @@ ggplot() +
   labs(title= "Median Age across Virginia Beach") +
   mapTheme
 
-### map health disease fishnet
+### map health disease fishnet <- <- 
 heart_disease_net <-
   vb_health %>%
   st_sf() %>%
@@ -364,7 +382,7 @@ heart_disease_net <-
 
 ggplot() + 
   geom_sf(data = vb_boundary, fill = NA) +
-  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
+  geom_sf(data = heart_disease_net, color = NA, aes(fill = CHD_CrudePrev)) +
   labs(title= "Prevalance of Heart Disease across Virginia Beach") +
   mapTheme
 
@@ -373,7 +391,7 @@ tracts_mapping <-
   st_sf() %>%
   mutate(CHD_CrudePrev = ifelse(is.na(vb_health$CHD_CrudePrev),0,vb_health$CHD_CrudePrev))
 
-#interpolate from tracts to fishnet. Look up the `extensive` parameter.
+# interpolate from tracts to fishnet. Look up the `extensive` parameter.
 tracts_fishnet <-
   dplyr::select(tracts_mapping, CHD_CrudePrev) %>%
   st_interpolate_aw(., vb_fishnet, extensive = TRUE)
