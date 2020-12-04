@@ -14,6 +14,9 @@ library(mapboxapi)
 library(riem)
 library(measurements)
 library(mapboxapi)
+library(sf)
+library(FNN)
+
 
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    plot.title =element_text(size=12),
