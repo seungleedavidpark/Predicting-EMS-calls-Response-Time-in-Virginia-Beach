@@ -32,7 +32,7 @@ plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    axis.ticks=element_blank())
 
 mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
-                  plot.title =element_text(size=12),
+                  plot.title =element_text(size=20),
                   plot.subtitle = element_text(size=7),
                   plot.caption = element_text(size = 5),
                   axis.line=element_blank(),
@@ -200,53 +200,57 @@ ggplot() +
 ggplot() + 
   geom_sf(data = vb_boundary, fill = "black") +
   geom_sf(data = net <- main_ems.sf %>% 
-                          filter(`dotw` == "Sun" & `time_of_day` == "Overnight") %>%
+                          filter(`dotw` == "Sat" & `time_of_day` == "Overnight") %>%
                           mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
                           dplyr::select(ResponseTime) %>%
                           aggregate(., vb_fishnet, mean) %>%
                           mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
                           dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
-  scale_fill_viridis_c(option="plasma") +
-  geom_sf(data = ems_stations, color="white", size =1.5, shape = 23, fill = "white") +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Overnight Response Time") +
   mapTheme
   
 ggplot() + 
   geom_sf(data = vb_boundary, fill = "black") +
   geom_sf(data = net <- main_ems.sf %>% 
-            filter(`dotw` == "Sun" & `time_of_day` == "Morning") %>%
+            filter(`dotw` == "Sat" & `time_of_day` == "Morning") %>%
             mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
             dplyr::select(ResponseTime) %>%
             aggregate(., vb_fishnet, mean) %>%
             mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
             dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
-  scale_fill_viridis_c(option="plasma") +
-  geom_sf(data = ems_stations, color="white", size =1.5, shape = 23, fill = "white")+
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Morning Response Time") +
   mapTheme
 
 ggplot() + 
   geom_sf(data = vb_boundary, fill = "black") +
   geom_sf(data = net <- main_ems.sf %>% 
-            filter(`dotw` == "Sun" & `time_of_day` == "Afternoon") %>%
+            filter(`dotw` == "Sat" & `time_of_day` == "Afternoon") %>%
             mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
             dplyr::select(ResponseTime) %>%
             aggregate(., vb_fishnet, mean) %>%
             mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
             dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
-  scale_fill_viridis_c(option="plasma") +
-  geom_sf(data = ems_stations, color="white", size =1.5, shape = 23, fill = "white") +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Afternoon Response Time") +
   mapTheme
 
 ggplot() + 
   geom_sf(data = vb_boundary, fill = "black") +
   geom_sf(data = net <- main_ems.sf %>% 
-            filter(`dotw` == "Sun" & `time_of_day` == "Evening") %>%
+            filter(`dotw` == "Sat" & `time_of_day` == "Evening") %>%
             mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
             dplyr::select(ResponseTime) %>%
             aggregate(., vb_fishnet, mean) %>%
             mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
             dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
-  scale_fill_viridis_c(option="plasma") +
-  geom_sf(data = ems_stations, color="white", size =1.5, shape = 23, fill = "white") +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Evening Response Time") +
   mapTheme
 
 
@@ -366,20 +370,6 @@ fire_stations <- st_read('Fire_Stations.shp') %>%
   dplyr::filter(CITY == 'Virginia Beach') %>%
   st_transform(st_crs(vb_fishnet)) %>%
   mutate(Legend = "fire_stations")
-
-vars_net <- 
-  ems_stations %>%
-  st_join(., vb_fishnet, join=st_within) %>%
-  st_drop_geometry() %>%
-  group_by(OBJECTID, Legend) %>%
-  summarize(count = n()) %>%
-  full_join(vb_fishnet, by = "OBJECTID") %>%
-  spread(Legend, count, fill=0) %>%
-  st_sf() %>%
-  dplyr::select(-`<NA>`) %>%
-  na.omit() %>%
-  ungroup()
-
 
 ems_station_nn = 
   nn_function(st_coordinates(st_centroid(vb_fishnet)), ems_stations, 1)
