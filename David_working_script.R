@@ -17,7 +17,7 @@ library(mapboxapi)
 library(sf)
 library(FNN)
 
-
+######setup######
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    plot.title =element_text(size=12),
                    plot.subtitle = element_text(size=8),
@@ -297,7 +297,7 @@ ggplot() +
 
 
 
-####mapping all calls response time#######
+#mapping all calls response time
 call_duration_net <- 
   dplyr::select(main_ems.sf) %>% 
   mutate(Call_to_OnScene = as.numeric(main_ems.sf$Call_to_OnScene)) %>% 
@@ -315,7 +315,7 @@ ggplot() +
   labs(title= "Mean call duration by fishnet") +
   mapTheme
 
-####mapping all calls response time#######
+#mapping all calls response time
 monday_aftrenoon_net <- main_ems.sf %>% 
   filter(`dotw` == "Tue" & `time_of_day` == "Afternoon") %>%
   mutate(Call_to_OnScene = as.numeric(Call_to_OnScene)) %>% 
@@ -504,7 +504,6 @@ grid.arrange(
 ##### 4. test for spatial process and correlations #####
 ### local moran's I
 ### colinearity tests
-
 ##### 5. model building #####
 ### what type modeling
 ### what variables

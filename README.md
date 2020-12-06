@@ -2,18 +2,18 @@
 This project aims to create a model that predicts EMS calls to better allocate ambulances using the the Virginia Beach EMS call data. This is a final project of University Pennsylvania City Planning Program's Public Policy Analytics course (MUSA508) during the fall 2020 semester. 
 
 # TASK LIST #
-
-- read through chapters on predictive policing and the rideshare labs/chapters
-- David: create time variables (call -> on scene, time of the day, day of the week, seasons, etc.), weather data, violent crime data (nearest neighbor)
-- Al Jalil: EMS locations(isochrones/nearest neighbor), fire/hospital(isochrones), health outcomes data loading, & crash data
-- NEXT MEETING: SUNDAY, NOV 29, 8pm
+  -  DP: email Michael re office hour on Tuesday, 1030-430
+  -  DP: clean up script (upload exp. analysis)
+  -  create distance features (DP to post on piazza first)
+  -  DP: test for spatial process and correlations
+  -  AG: model building
+  -  AG: cross validation
+  
+  -  DP: Markdown document
+  -  AG: recording of the video
 
 
 # MEETING NOTES #
-
-Sat, November 21
-- project planning
-- initial coding and data loading.
 
 
 # SCHEDULE AND DELIVERABLES #
