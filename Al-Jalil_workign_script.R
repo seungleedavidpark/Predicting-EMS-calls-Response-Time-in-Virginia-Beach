@@ -1,76 +1,54 @@
-##### 1.load and format the VB dataset ####
-### make additional columns (delays, etc.)
-### make it sf object
-### fishnet
-
-##### 2.load load additional datasets #####
-### health outcome, crash, census etc.
-### nearest neighbor?
-
-##### 3. exploratory analysis ####
-
-##### 4. test for spatial process and correlations #####
-### local moran's I
-### colinearity tests
-
-##### 5. model building #####
-### what type modeling
-### what variables
-### confusion matrices 
-
-##### 6. Cross Validation #####
-### to think about whether to cross validate over neighborhoods or census tracts
-### temporal and spatial CV 
-
+##### 0. Set up ######
+library(tidyverse)
+library(tidycensus)
 library(dplyr)
 library(sf)
+library(mapview)
+library(viridis)
+library(riem)
+library(lubridate)
+library(gridExtra)
 library(leaflet)
 library(shiny)
 library(mapboxapi)
-library(mapview)
-library(tidycensus)
-library(tidyverse)
-library(viridis)
 library(riem)
 library(measurements)
 library(mapboxapi)
 
-mapTheme <- function(base_size = 12) {
-  theme(
-    text = element_text( color = "black"),
-    plot.title = element_text(size = 16,colour = "black"),
-    plot.subtitle=element_text(face="italic"),
-    plot.caption=element_text(hjust=0),
-    axis.ticks = element_blank(),
-    panel.background = element_blank(),axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    panel.grid.minor = element_blank(),
-    strip.text.x = element_text(size = 14))
-}
+plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
+                   plot.title =element_text(size=12),
+                   plot.subtitle = element_text(size=8),
+                   plot.caption = element_text(size = 6),
+                   axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+                   axis.title.x = element_text(size = 12),
+                   axis.text.y = element_text(size = 8),
+                   axis.title.y = element_text(size = 12),
+                   # Set the entire chart region to blank
+                   panel.background=element_blank(),
+                   plot.background=element_blank(),
+                   #panel.border=element_rect(colour="#F0F0F0"),
+                   # Format the grid
+                   panel.grid.major=element_line(colour="#565050",size=.2),
+                   axis.ticks=element_blank())
 
-plotTheme <- function(base_size = 12) {
-  theme(
-    text = element_text( color = "black"),
-    plot.title = element_text(size = 16,colour = "black"),
-    plot.subtitle = element_text(face="italic"),
-    plot.caption = element_text(hjust=0),
-    axis.ticks = element_blank(),
-    panel.background = element_blank(),
-    panel.grid.major = element_line("grey80", size = 0.1),
-    panel.grid.minor = element_blank(),
-    strip.background = element_rect(fill = "grey80", color = "white"),
-    strip.text = element_text(size=12),
-    axis.title = element_text(size=12),
-    axis.text = element_text(size=10),
-    plot.background = element_blank(),
-    legend.background = element_blank(),
-    legend.title = element_text(colour = "black", face = "italic"),
-    legend.text = element_text(colour = "black", face = "italic"),
-    strip.text.x = element_text(size = 14)
-  )
-}
+mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
+                  plot.title =element_text(size=20),
+                  plot.subtitle = element_text(size=7),
+                  plot.caption = element_text(size = 5),
+                  axis.line=element_blank(),
+                  axis.text.x=element_blank(),
+                  axis.text.y=element_blank(),
+                  axis.ticks=element_blank(),
+                  axis.title.x=element_blank(),
+                  axis.title.y=element_blank(),
+                  panel.background=element_blank(),
+                  panel.border=element_blank(),
+                  panel.grid.major=element_line(colour = 'transparent'),
+                  panel.grid.minor=element_blank(),
+                  legend.direction = "vertical", 
+                  legend.position = "right",
+                  plot.margin = margin(1, 1, 1, 1, 'cm'),
+                  legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
 
 qBr <- function(df, variable, rnd) {
   if (missing(rnd)) {
@@ -107,129 +85,119 @@ nn_function <- function(measureFrom,measureTo,k) {
 }
 
 
+palette5 <- c("#03254c","#1167b1","#187bcd","#2a9df4","#d0efff")
+palette4 <- c("#3a7d7c","#ffa137","#ff4400","#065125")
+palette2 <- c("#03254c","#187bcd")
+palette1 <- c("#03254c")
+
 my_token <- "pk.eyJ1IjoiZ2F1bHQzNCIsImEiOiJja2ZsbWd5cm8xNDBsMnlwajMzbW15c2Y0In0.nZ9siGKFAjMx_JQVEzeOtg"
-mb_access_token(my_token, install = TRUE, overwrite = TRUE) #install = True installs your token so you dont have to keep loading your token
 
-colors_3 <- viridisLite::viridis(3)
+#load main dataset and make it an SF object
 
-colors_12 <- viridisLite::viridis(12)
-
-ems_locations <- st_read('201127_ems_geocoded.shp') %>%
-  st_transform('EPSG:6595')
-mapview(ems_locations)
-
-selected_vars <- c("B01003_001E", # Total Population
-                   "B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
-                   "B02001_002E", # People describing themselves as "white alone"
-                   "B02001_003E", # People describing themselves as "black" or "african-american" alone
-                   "B15001_050E", # Females with bachelors degrees
-                   "B15001_009E", # Males with bachelors degrees
-                   "B19013_001E", # Median HH income
-                   "B25058_001E", # Median rent
-                   "B06012_002E", # Total poverty
-                   "B08301_001E", # People who have means of transportation to work
-                   "B08301_002E", # Total people who commute by car, truck, or van
-                   "B08301_010E", # Total people who commute by public transportation"
-                   "B03002_012E", # Estimate Total Hispanic or Latino by race
-                   "B19326_001E", # Median income in past 12 months (inflation-adjusted)
-                   "B07013_001E", # Total households
-                   "B08013_001E", # Travel Time to Work
-                   "B01002_001E") # Median Age
-
-vb_census <- 
-  get_acs(geography = "tract", 
-          variables = selected_vars, 
-          year=2018, 
-          state="VA",
-          county = c("Virginia Beach"),
-          geometry=T, 
-          output="wide") %>%
-  st_transform('EPSG:6595') %>%
-  rename(TotalPop = B01003_001E,
-         Med_Age = B01002_001E,
-         Race_TotalPop = B02001_001E, 
-         Whites = B02001_002E,
-         Blacks = B02001_003E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
-         MedHHInc = B19013_001E,
-         TotalPoverty = B06012_002E,
-         TotalCommute = B08301_001E,
-         CarCommute = B08301_002E,
-         PubCommute = B08301_010E,
-         TotalHispanic = B03002_012E,
-         MedInc = B19326_001E,
-         TotalHH = B07013_001E)
-vb_census <- vb_census %>%
-  dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
-  mutate(Area = st_area(vb_census),
-         pctWhite = (ifelse(Race_TotalPop > 0, Whites / Race_TotalPop,0))*100,
-         pctBlack = (ifelse(Race_TotalPop > 0, Blacks / Race_TotalPop,0))*100,
-         pctHis = (ifelse(Race_TotalPop >0, TotalHispanic/Race_TotalPop,0))*100,
-         pctBachelors = (ifelse(Race_TotalPop > 0, ((FemaleBachelors + MaleBachelors) / Race_TotalPop),0)) *100,
-         pctPoverty = (ifelse(Race_TotalPop > 0, TotalPoverty / Race_TotalPop, 0))*100,
-         pctCarCommute = (ifelse(TotalCommute > 0, CarCommute / TotalCommute,0))*100,
-         pctPubCommute = (ifelse(TotalCommute > 0, PubCommute / TotalCommute,0))*100,
-         year = "2018") %>%
-  mutate(MedHHInc = replace_na(MedHHInc, 0),
-         pctBachelors= replace_na(pctBachelors,0),
-         pctHis= replace_na(pctHis,0),
-         pctCarCommute= replace_na(pctCarCommute,0),
-         PopDens = (TotalPop/(Area/27878400))) %>%
-  dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
-
-#add health
-health_dat <- read.csv('health_data_500_cities_vabch.csv') %>% 
-  dplyr::select(TractFIPS, ends_with('CrudePrev')) %>% 
-  rename(GEOID = TractFIPS)
-
-vb_health <- merge(health_dat, vb_census,
-                   by.x = "GEOID", by.y = "GEOID",
-                   all.x = FALSE, all.y = TRUE,
-                   sort = FALSE) %>% 
-  dplyr::select(GEOID, ends_with('CrudePrev'), geometry)
-
-hospitals <- st_read('Hospitals__Virginia_.shp') %>% 
-  dplyr::filter(City == 'Virginia Beach')
-mapview(hospitals)
-
-fire_stations <- st_read('Fire_Stations.shp') %>% 
-  dplyr::filter(CITY == 'Virginia Beach')
-mapview(fire_stations)
-
-
-#--- david_script
+#distance to ems stations and response time
 
 main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
 main_ems.sf <- main_ems %>%
   na.omit() %>%
   st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
   st_transform('EPSG:6595')
-mapview::mapview(main_ems.sf)
 
-### make additional columns (delays, etc.)
-### fishnet
+### create time bins (30 min and 60 min)/create time duration from "CallDateandTime" to "OnSceneDateandTime" and "time_of_day" column
+main_ems.sf <- main_ems.sf %>%
+  mutate(interval60 = floor_date(mdy_hm(CallDateandTime), unit = "60 mins"),
+         interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  mutate(ResponseTime =  as.numeric(difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min"))) %>%
+  mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
+                                 hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
+                                 hour(interval60) >= 12 & hour(interval60) < 18 ~ "Afternoon",
+                                 hour(interval60) >= 18 & hour(interval60) <= 24 ~ "Evening")) %>%
+  mutate(times = case_when(hour(interval60) >= 0 & hour(interval60) < 3 ~ "one-three",
+                           hour(interval60) >= 3 & hour(interval60) < 6 ~ "three-six",
+                           hour(interval60) >= 6 & hour(interval60) < 9 ~ "six-nine",
+                           hour(interval60) >= 9 & hour(interval60) < 12 ~ "nine-twelve",
+                           hour(interval60) >= 12 & hour(interval60) < 15 ~ "twelve-fifteen",
+                           hour(interval60) >= 15 & hour(interval60) < 18 ~ "fifteen-eighteen",
+                           hour(interval60) >= 18 & hour(interval60) < 21 ~ "eighteen-twentyone",
+                           hour(interval60) >= 21 & hour(interval60) <= 24 ~ "twentyone-twentyfour")) %>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")) %>%
+  mutate(Date = substring(CallDateandTime,1,6)) %>%
+  unite(Date_timeofday, c(Date, time_of_day), sep = " ", remove = FALSE) %>%
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+  
+### create call volume column
+vol_count_dat <- main_ems.sf %>%
+  st_drop_geometry() %>%
+  group_by(Date, times) %>%
+  summarise(CallVolume = n()) %>%
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+
+main_ems.sf <-
+  left_join(main_ems.sf, vol_count_dat, by="Date_time")
+
+### 
+
+ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+
+### create fishnet
 vb_boundary <-
   st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
   st_transform('EPSG:6595')
 
 mapview::mapview(vb_boundary)
 
+vb_tracts <- 
+  st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
+  subset(OBJECTID!= 22) %>%
+  st_transform('EPSG:6595')
+
 vb_fishnet <- 
   st_make_grid(vb_boundary,
                cellsize = 1000, 
-               square = TRUE) %>%
+               square = FALSE) %>%
+  .[vb_boundary] %>% 
   st_sf() %>%
   mutate(uniqueID = rownames(.))
 
+ems_stations <- st_read('201127_ems_geocoded.shp') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(OBJECTID = osm_id) %>%
+  mutate(Legend = "ems_stations")
+
+hospitals <- st_read('Hospitals__Virginia_.shp') %>% 
+  dplyr::filter(City == 'Virginia Beach') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(Legend = "hospitals")
+#mapview(hospitals)
+
+fire_stations <- st_read('Fire_Stations.shp') %>% 
+  dplyr::filter(CITY == 'Virginia Beach') %>%
+  st_transform(st_crs(vb_fishnet)) %>%
+  mutate(Legend = "fire_stations")
+
+# ems_station_nn = 
+#   nn_function(st_coordinates(st_centroid(vb_fishnet)), ems_stations, 1)
+
+
+### create EMS calls on fishnet
 vb_ems_fishnet <- 
   dplyr::select(main_ems.sf) %>%    
-  mutate(countEMS = 1) %>%    
+  mutate(countEMS = 1,
+         ) %>%    
   aggregate(., vb_fishnet, sum) %>%    
   mutate(countEMS = replace_na(countEMS, 0),
          uniqueID = rownames(.),
          cvID = sample(round(nrow(vb_fishnet) / 24),          
                        size=nrow(vb_fishnet), replace = TRUE))
+
+ride.template <- 
+  filter(ride2, week %in% c(45:52)) %>%
+  semi_join(st_drop_geometry(studyArea.tracts), 
+            by = c("Pickup.Census.Tract" = "GEOID"))
 
 ggplot() +
   geom_sf(data = vb_ems_fishnet, aes(fill = countEMS), color = NA) +
@@ -237,106 +205,182 @@ ggplot() +
   labs(title = "Fishnet of EMS calls in Virginia Beach")
 
 
-PopDens_net <- 
-  dplyr::select(vb_census) %>% #what does it mean to dplyr::select(traffic_crashes)? I thought this was for selecting columns?
-  mutate(PopDens = as.numeric(vb_census$PopDens)) %>% #why do we say countCrashes = 1? shouldnt it be equal to an aggregate sum?
+####mapping all calls response time#######
+ResponseTime_net <- 
+  main_ems.sf %>%
+  dplyr::select(ResponseTime, dotw, time_of_day) %>%
+  mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+  dplyr::select(ResponseTime) %>%
   aggregate(., vb_fishnet, mean) %>%
-  mutate(PopDens = replace_na(PopDens, 0),
-         uniqueID = rownames(.),
-         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+  mutate(ResponseTime = replace_na(ResponseTime, 0))
 
 ggplot() + 
-  geom_sf(data = vb_boundary, fill = NA) +
-  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
-  labs(title= "Population Density across Virginia Beach") +
-  mapTheme()
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = ResponseTime_net %>%
+            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma") +
+  geom_sf(data = ems_stations, color="white") +
+  labs(title= "Response Time of EMS calls by fishnet") +
+  mapTheme
 
-vb_health_census <- merge(health_dat, vb_census,
-                   by.x = "GEOID", by.y = "GEOID",
-                   all.x = TRUE, all.y = TRUE,
-                   sort = FALSE) 
 
-heart_disease_net <-
-  dplyr::select(vb_health_census) %>% 
-  mutate(CHD_CrudePrev = ifelse(is.na(vb_health_census$CHD_CrudePrev),0,vb_health_census$CHD_CrudePrev)) %>%
-  aggregate(., vb_fishnet, mean) %>%
-  mutate(uniqueID = rownames(.),
-         cvID = sample(round(nrow(vb_fishnet) / 24), size=nrow(vb_fishnet), replace = TRUE))
+#base plots for 4 time bins - create 4 maps per days by changing `dotw` ="Mon"
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = net <- main_ems.sf %>% 
+                          filter(`dotw` == "Sat" & `time_of_day` == "Overnight") %>%
+                          mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+                          dplyr::select(ResponseTime) %>%
+                          aggregate(., vb_fishnet, mean) %>%
+                          mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
+                          dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Overnight Response Time") +
+  mapTheme
+  
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = net <- main_ems.sf %>% 
+            filter(`dotw` == "Sat" & `time_of_day` == "Morning") %>%
+            mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+            dplyr::select(ResponseTime) %>%
+            aggregate(., vb_fishnet, mean) %>%
+            mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
+            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Morning Response Time") +
+  mapTheme
 
 ggplot() + 
-  geom_sf(data = vb_boundary, fill = NA) +
-  geom_sf(data = PopDens_net, color = NA, aes(fill = PopDens)) +
-  labs(title= "PPrevalance of Heart Disease across Virginia Beach") +
-  mapTheme()
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = net <- main_ems.sf %>% 
+            filter(`dotw` == "Sat" & `time_of_day` == "Afternoon") %>%
+            mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+            dplyr::select(ResponseTime) %>%
+            aggregate(., vb_fishnet, mean) %>%
+            mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
+            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Afternoon Response Time") +
+  mapTheme
 
-##### 2.load additional datasets #####
-### census (pop_density, med_age, race, poverty, income, education)
-selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
-                   "B02001_002E", # People describing themselves as "white alone"
-                   "B02001_003E", # People describing themselves as "black" or "african-american" alone
-                   "B15001_050E", # Females with bachelors degrees
-                   "B15001_009E", # Males with bachelors degrees
-                   "B19013_001E", # Median HH income
-                   "B25058_001E", # Median rent
-                   "B06012_002E", # Total poverty
-                   "B08301_001E", # People who have means of transportation to work
-                   "B08301_002E", # Total people who commute by car, truck, or van
-                   "B08301_010E", # Total people who commute by public transportation"
-                   "B03002_012E", # Estimate Total Hispanic or Latino by race
-                   "B19326_001E", # Median income in past 12 months (inflation-adjusted)
-                   "B07013_001E", # Total households
-                   "B08013_001E",
-                   "B01002_001E")
+ggplot() + 
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = net <- main_ems.sf %>% 
+            filter(`dotw` == "Sat" & `time_of_day` == "Evening") %>%
+            mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+            dplyr::select(ResponseTime) %>%
+            aggregate(., vb_fishnet, mean) %>%
+            mutate(ResponseTime = replace_na(ResponseTime, 0)) %>%
+            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma", limits=c(0,45), breaks=c(15,30,45)) +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white") +
+  labs(title= "Saturday Evening Response Time") +
+  mapTheme
 
-vb_census <- 
-  get_acs(geography = "tract", 
-          variables = selected_vars, 
-          year=2018, 
-          state="VA",
-          county = c("Virginia Beach"),
-          geometry=T, 
-          output="wide") %>%
-  #st_transform('ESRI:102658') %>%
-  rename(Med_Age = B01002_001E,
-         TotalPop = B02001_001E, 
-         Whites = B02001_002E,
-         Blacks = B02001_003E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
-         MedHHInc = B19013_001E,
-         TotalPoverty = B06012_002E,
-         TotalCommute = B08301_001E,
-         CarCommute = B08301_002E,
-         PubCommute = B08301_010E,
-         TotalHispanic = B03002_012E,
-         MedInc = B19326_001E,
-         TotalHH = B07013_001E) %>%
-  dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
-  mutate(pctWhite = (ifelse(TotalPop > 0, Whites / TotalPop,0))*100,
-         pctBlack = (ifelse(TotalPop > 0, Blacks / TotalPop,0))*100,
-         pctHis = (ifelse(TotalPop >0, TotalHispanic/TotalPop,0))*100,
-         pctBachelors = (ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0)) *100,
-         pctPoverty = (ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0))*100,
-         pctCarCommute = (ifelse(TotalCommute > 0, CarCommute / TotalCommute,0))*100,
-         pctPubCommute = (ifelse(TotalCommute > 0, PubCommute / TotalCommute,0))*100,
-         year = "2018") %>%
-  mutate(MedHHInc = replace_na(MedHHInc, 0),
-         pctBachelors= replace_na(pctBachelors,0),
-         pctHis= replace_na(pctHis,0),
-         pctCarCommute= replace_na(pctCarCommute,0)) %>%
-  dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
-### weather data
+
+
+
+
+# weekend vs weekday response time
+ggplot(data = main_ems.sf %>%
+         group_by(dotw, time_of_day) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=meanResponeTime, y=dotw, fill = time_of_day), stat="identity", position=position_dodge())+
+  scale_fill_manual(values = palette5) +
+  labs(title="Response Time of EMS calls by days of the week and time of the day",
+       x="ResponseTime", 
+       y="Day of the week")+
+  plotTheme
+
+
+ggplot(data = main_ems.sf %>%
+         group_by(CallPriority) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=CallPriority, y=meanResponeTime, fill=CallPriority), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  plotTheme
+
+
+
+### 2.2 Load weather data
 vb_weather <- 
-  riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2017-08-15") %>%
+  riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2018-03-01") %>%
   dplyr::select(valid, tmpf, p01i, sknt, relh)%>%
   replace(is.na(.), 0) %>%
-  #mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
-  #mutate(week = week(interval60),
-  #dotw = wday(interval60, label=TRUE)) %>%
-  #group_by(interval60) %>%
+  mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  group_by(interval60) %>%
   summarize(Temperature = max(tmpf),
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt),
             Humidity = max(relh)) %>%
-  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature)) %>%
+  mutate(SnowPresent = ifelse(Precipitation > 0.0 & Temperature < 32.0, "Snow", "NoSnow"),
+         HeavyRain = ifelse(Precipitation > 0.5, "HeavyRain", "NoHeavyRain"))
+
+
+##### plot weather data
+grid.arrange(
+  ggplot(vb_weather, aes(interval60,Precipitation)) + geom_line(aes(),) + 
+    labs(title="Percipitation", x="Hour", y="Perecipitation") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Temperature)) + geom_line(aes(),) + 
+    labs(title="Temperature", x="Hour", y="Temperature") + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Humidity)) + geom_line(aes(),) + 
+    labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none"),
+  top="Weather Data - Virginia Beach - January to August, 2017")
+
+main_ems.sf <-
+  left_join(main_ems.sf, vb_weather, by="interval60")
+
+#precipitation and response time
+ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+#temperature and response time
+ggplot(main_ems.sf, aes(x=Temperature, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+#wind speed and response time
+ggplot(main_ems.sf, aes(x=Wind_Speed, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+
+grid.arrange(
+  ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme,
+  ggplot(main_ems.sf, aes(x=Temperature, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme,
+  ggplot(main_ems.sf, aes(x=Wind_Speed, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    plotTheme
+)
+
+grid.arrange(
+  ggplot(data = main_ems.sf %>%
+         group_by(SnowPresent) %>%
+         drop_na(SnowPresent) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=SnowPresent, y=meanResponeTime, fill=SnowPresent), stat="identity", position=position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = palette2) + 
+    plotTheme,
+    ggplot(data = main_ems.sf %>%
+             group_by(HeavyRain) %>%
+             drop_na(HeavyRain) %>%
+             summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+      geom_bar(aes(x=HeavyRain, y=meanResponeTime, fill=HeavyRain), stat="identity", position=position_dodge(), show.legend = FALSE) +
+      scale_fill_manual(values = palette2) + 
+      plotTheme
+)
+
+ggplot(main_ems.sf, aes(x=ResponseTime)) +
+  geom_histogram()
+
