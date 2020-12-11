@@ -1,0 +1,172 @@
+---
+title: "Predicting EMS call response time in Virginia Baech"
+author: "David Seunglee Park"
+date: "12/10/2020"
+output: html_document
+
+---
+
+# 1. Introduction
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#load libraries
+library(tidyverse)
+library(tidycensus)
+library(dplyr)
+library(sf)
+library(mapview)
+library(viridis)
+library(riem)
+library(lubridate)
+library(gridExtra)
+library(leaflet)
+library(shiny)
+library(mapboxapi)
+library(riem)
+library(measurements)
+library(mapboxapi)
+library(FNN)
+```
+
+
+```{r theme and functions, echo=FALSE}
+#themes and nn_function
+# Set up plot and map themes
+plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
+                   plot.title =element_text(size=12),
+                   plot.subtitle = element_text(size=8),
+                   plot.caption = element_text(size = 6),
+                   axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+                   axis.title.x = element_text(size = 12),
+                   axis.text.y = element_text(size = 8),
+                   axis.title.y = element_text(size = 12),
+                   # Set the entire chart region to blank
+                   panel.background=element_blank(),
+                   plot.background=element_blank(),
+                   #panel.border=element_rect(colour="#F0F0F0"),
+                   # Format the grid
+                   panel.grid.major=element_line(colour="#565050",size=.2),
+                   axis.ticks=element_blank())
+
+mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
+                  plot.title =element_text(size=20),
+                  plot.subtitle = element_text(size=7),
+                  plot.caption = element_text(size = 5),
+                  axis.line=element_blank(),
+                  axis.text.x=element_blank(),
+                  axis.text.y=element_blank(),
+                  axis.ticks=element_blank(),
+                  axis.title.x=element_blank(),
+                  axis.title.y=element_blank(),
+                  panel.background=element_blank(),
+                  panel.border=element_blank(),
+                  panel.grid.major=element_line(colour = 'transparent'),
+                  panel.grid.minor=element_blank(),
+                  legend.direction = "vertical", 
+                  legend.position = "right",
+                  plot.margin = margin(1, 1, 1, 1, 'cm'),
+                  legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <-
+    as.matrix(measureFrom)
+  measureTo_Matrix <-
+    as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo_Matrix, measureFrom_Matrix, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+# kloat color palettes
+palette5 <- c("#03254c","#1167b1","#187bcd","#2a9df4","#d0efff")
+palette4 <- c("#3a7d7c","#ffa137","#ff4400","#065125")
+palette2 <- c("#03254c","#187bcd")
+palette1 <- c("#03254c")
+
+my_token <- "pk.eyJ1IjoiZ2F1bHQzNCIsImEiOiJja2ZsbWd5cm8xNDBsMnlwajMzbW15c2Y0In0.nZ9siGKFAjMx_JQVEzeOtg"
+```
+
+```{r, load the main dataset}
+# load main dataset and make it an SF object
+main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
+main_ems.sf <- main_ems %>%
+  na.omit() %>%
+  st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+  st_transform('EPSG:6595')
+```
+
+```{r, create time and volumne vars}
+# create time bins (30 min and 60 min)
+# create days and weeks
+# create ResponseTime from "CallDateandTime" to "OnSceneDateandTime" 
+# create "time_of_day" (6 hour periods)
+# create "times" (3 hour periods)
+main_ems.sf <- main_ems.sf %>%
+  mutate(interval60 = floor_date(mdy_hm(CallDateandTime), unit = "60 mins"),
+         interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  mutate(ResponseTime =  as.numeric(difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min"))) %>%
+  mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
+                                 hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
+                                 hour(interval60) >= 12 & hour(interval60) < 18 ~ "Afternoon",
+                                 hour(interval60) >= 18 & hour(interval60) <= 24 ~ "Evening")) %>%
+  mutate(times = case_when(hour(interval60) >= 0 & hour(interval60) < 3 ~ "one-three",
+                           hour(interval60) >= 3 & hour(interval60) < 6 ~ "three-six",
+                           hour(interval60) >= 6 & hour(interval60) < 9 ~ "six-nine",
+                           hour(interval60) >= 9 & hour(interval60) < 12 ~ "nine-twelve",
+                           hour(interval60) >= 12 & hour(interval60) < 15 ~ "twelve-fifteen",
+                           hour(interval60) >= 15 & hour(interval60) < 18 ~ "fifteen-eighteen",
+                           hour(interval60) >= 18 & hour(interval60) < 21 ~ "eighteen-twentyone",
+                           hour(interval60) >= 21 & hour(interval60) <= 24 ~ "twentyone-twentyfour")) %>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")) %>%
+  mutate(Date = substring(CallDateandTime,1,6)) %>%
+  unite(Date_timeofday, c(Date, time_of_day), sep = " ", remove = FALSE) %>%
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+
+# create call volume column
+vol_count_dat <- main_ems.sf %>%
+  st_drop_geometry() %>%
+  group_by(Date, times) %>%
+  summarise(CallVolume = n()) %>%
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+
+# join the volume data file to main dataframe
+main_ems.sf <-
+  left_join(main_ems.sf, vol_count_dat, by="Date_time")
+```
+
+```{r, volume plot}
+# plot call volume
+ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
+  geom_point(size = .75, colour = "darkblue") +
+  plotTheme
+```
+
+

@@ -4,7 +4,6 @@ This project aims to create a model that predicts EMS calls to better allocate a
 # TASK LIST #
   -  DP: email Michael re office hour on Tuesday, 1030-430
   -  DP: clean up script (upload exp. analysis)
-  -  create distance features (DP to post on piazza first)
   -  DP: test for spatial process and correlations
   -  AG: model building
   -  AG: cross validation
