@@ -384,8 +384,35 @@ grid.arrange(
 # histogram of the ResponseTime
 ggplot(main_ems.sf, aes(x=ResponseTime)) +
   geom_histogram(binwidth=1, fill = "darkblue") +
-  xlim(0, 75) +
+  xlim(0, 50) +
   labs(title="Histogram of all Response Time of EMS calls",
        x="ResponseTime", 
        y="Count")+
   plotTheme  
+
+
+# time features -> dotw,6hr/3hr bins (time of the day), week, weekday/weekend, season, holiday
+# environmental features -> precipitation, humidity, temperature, snow, heavyrain, hurricane, thunderstorm
+# spatial features -> distance to ems stations, fire stations, hospitals, tracts/voronoi/neighborhood, elevation
+# EMS system features -> call volume, call priority, rescue squad/crew, calls for each rescue squad
+
+
+### RescueSquad.Number
+# MR: marine response team -> incident was in the water
+# ECOMM: means dispatcher needed to notify supervisors
+# starts with "E" supervisor of the rescue squad needed
+# numbers which end with R or P are specific ambulances
+# - "R" means thay are EMT, basic life suppport
+# - "P" staff with a paramedic
+# MCIT: mass casualty incident team
+
+### Ending with S, starting with MRTK, Starting with E and endin with P, HOLD, EMSOPS, 
+### start with MED, starts with U, starts with RB(RB04), ECH, AIRMED, stars with L, Starts with Z, 
+### ends with DR, starts with INS, starts with JTSKI, starts with CART, starts with TAC, BAT, SPEC, 
+### NE, BKTEM, SQ, FB, ends with S  
+
+#
+
+# create a voronoi diagram for the EMS stations
+
+
