@@ -15,6 +15,7 @@ library(riem)
 library(measurements)
 library(mapboxapi)
 library(FNN)
+library(ggvoronoi)
 
 # Set up plot and map themes
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
@@ -125,9 +126,15 @@ main_ems.sf <- main_ems.sf %>%
                            hour(interval60) >= 18 & hour(interval60) < 21 ~ "eighteen-twentyone",
                            hour(interval60) >= 21 & hour(interval60) <= 24 ~ "twentyone-twentyfour")) %>%
   mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")) %>%
-  mutate(Date = substring(CallDateandTime,1,6)) %>%
+  mutate(season = case_when(week >= 1 & week < 10 ~ "Winter",
+                            week >= 10 & week < 23 ~ "Spring",
+                            week >= 23 & week < 40 ~ "Summer",
+                            week >= 40 & week < 47 ~ "Fall", 
+                            week >= 47 & week <= 52 ~ "Winter")) %>%
+  mutate(Date = substring(CallDateandTime,1,7)) %>%
   unite(Date_timeofday, c(Date, time_of_day), sep = " ", remove = FALSE) %>%
-  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE) %>%
+  mutate(holiday = ifelse(Date %in% c("1/2/17 ", "1/16/17", "5/29/17", "7/4/17 ", "9/4/17 ", "11/23/1", "12/25/1", "1/1/18 ", "1/15/18"), "Holiday", "Non-Holiday"))
 
 # create call volume column
 vol_count_dat <- main_ems.sf %>%
@@ -183,6 +190,27 @@ fire_stations <- st_read('Fire_Stations.shp') %>%
   dplyr::filter(CITY == 'Virginia Beach') %>%
   st_transform(st_crs(vb_fishnet)) %>%
   mutate(Legend = "fire_stations")
+
+
+
+# create voronoi (still needs work)
+
+ems_stations <- ems_stations %>%
+  dplyr::mutate(lat = sf::st_coordinates(.)[,1],
+                lon = sf::st_coordinates(.)[,2])
+
+
+vb_map <- ggplot() + 
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white")
+
+vb_map +
+  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary)
+
+
+vb_map +
+  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary)
+
 
 # create nn features
 main_ems.sf <- main_ems.sf %>%
@@ -319,7 +347,8 @@ vb_weather <-
             Humidity = max(relh)) %>%
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature)) %>%
   mutate(SnowPresent = ifelse(Precipitation > 0.0 & Temperature < 32.0, "Snow", "NoSnow"),
-         HeavyRain = ifelse(Precipitation > 0.5, "HeavyRain", "NoHeavyRain"))
+         HeavyRain = ifelse(Precipitation > 0.5, "HeavyRain", "NoHeavyRain"),
+         Hurricane = ifelse(Wind_Speed > 74, "Hurricane","NoHurricane"))
 
 # join weather data to the main dataframe
 main_ems.sf <-
@@ -333,6 +362,8 @@ grid.arrange(
     labs(title="Temperature", x="Hour", y="Temperature") + theme(legend.position = "none"),
   ggplot(vb_weather, aes(interval60,Humidity)) + geom_line(aes(),) + 
     labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none"),
+  ggplot(vb_weather, aes(interval60,Wind_Speed)) + geom_line(aes(),) + 
+    labs(title="Wind_Speed", x="Hour", y="Wind_Speed")  + theme(legend.position = "none"),
   top="Weather Data - Virginia Beach - January to August, 2017")
 
 # plot precipitation and response time
@@ -394,7 +425,7 @@ ggplot(main_ems.sf, aes(x=ResponseTime)) +
 # time features -> dotw,6hr/3hr bins (time of the day), week, weekday/weekend, season, holiday
 # environmental features -> precipitation, humidity, temperature, snow, heavyrain, hurricane, thunderstorm
 # spatial features -> distance to ems stations, fire stations, hospitals, tracts/voronoi/neighborhood, elevation
-# EMS system features -> call volume, call priority, rescue squad/crew, calls for each rescue squad
+# EMS system features -> call volume, call priority, rescue squad/crew, calls for each rescue squad, call volume for voronoi cell 3 hour bins
 
 
 ### RescueSquad.Number
@@ -409,10 +440,10 @@ ggplot(main_ems.sf, aes(x=ResponseTime)) +
 ### Ending with S, starting with MRTK, Starting with E and endin with P, HOLD, EMSOPS, 
 ### start with MED, starts with U, starts with RB(RB04), ECH, AIRMED, stars with L, Starts with Z, 
 ### ends with DR, starts with INS, starts with JTSKI, starts with CART, starts with TAC, BAT, SPEC, 
-### NE, BKTEM, SQ, FB, ends with S  
-
-#
+### NE, BKTEM, SQ, FB, ends with S
 
 # create a voronoi diagram for the EMS stations
 
+ggplot() + 
+  geom_bar(main_ems.sf, aes(x=RescueSquad.Number))
 
