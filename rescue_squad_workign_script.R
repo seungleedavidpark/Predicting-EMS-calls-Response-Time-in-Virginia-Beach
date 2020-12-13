@@ -441,6 +441,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=advanced_life_support, y=meanResponeTime, fill=advanced_life_support), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls requiring Advanced Life Support") +
   plotTheme
 
 main_ems.sf$chief_dispatch <- ifelse (
@@ -467,6 +468,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=chief_dispatch, y=meanResponeTime, fill=chief_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls needing a Chief") +
   plotTheme
 
 main_ems.sf$special_event <- ifelse (
@@ -493,6 +495,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=special_event, y=meanResponeTime, fill=special_event), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls at Special Events") +
   plotTheme
 
 main_ems.sf$air_dispatch <- ifelse (
@@ -515,6 +518,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=air_dispatch, y=meanResponeTime, fill=air_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls Using Helicopter Ambulances") +
   plotTheme
 
 main_ems.sf$hold_dispatch <- ifelse (
@@ -536,7 +540,8 @@ ggplot(data = main_ems.sf %>%
          drop_na(hold_dispatch) %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=hold_dispatch, y=meanResponeTime, fill=hold_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
-  scale_fill_manual(values = palette2) + 
+  scale_fill_manual(values = palette2) +
+  labs(title= "Average Response Time Difference of EMS Calls on HOLD by Dispatcher") +
   plotTheme
 
 main_ems.sf$water_dispatch <- ifelse (
@@ -567,13 +572,14 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=water_dispatch, y=meanResponeTime, fill=water_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Marine EMS Calls") +
   plotTheme
 
 main_ems.sf$mass_casualty_dispatch <- ifelse (
   (
     startsWith(main_ems.sf$RescueSquad.Number, 'MCI') 
   ), 
-  "Mass Casualty Incident", "Not Mass Casualty Incident"
+  "Mass Casualty Incident", "Not a Mass Casualty Incident"
 )
 
 main_ems.sf$b_mass_casualty_dispatch <- ifelse (
@@ -589,6 +595,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=mass_casualty_dispatch, y=meanResponeTime, fill=mass_casualty_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Mass Casualty EMS Calls") +
   plotTheme
 
 main_ems.sf$fire_dispatch <- ifelse (
@@ -619,6 +626,7 @@ ggplot(data = main_ems.sf %>%
          summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=fire_dispatch, y=meanResponeTime, fill=fire_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
   scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Fire-related EMS Calls") +
   plotTheme
 
 
