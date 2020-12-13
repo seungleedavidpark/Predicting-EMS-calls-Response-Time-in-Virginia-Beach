@@ -17,6 +17,8 @@ library(mapboxapi)
 library(FNN)
 library(ggvoronoi)
 library(ggcorrplot)
+library(caret)
+library(kableExtra)
 
 # Set up plot and map themes
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
@@ -145,8 +147,16 @@ vol_count_dat <- main_ems.sf %>%
   unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
 
 # join the volume data file to main dataframe
+anyNA(main_ems.sf$SnowPresent)
 main_ems.sf <-
-  left_join(main_ems.sf, vol_count_dat, by="Date_time")
+  left_join(main_ems.sf, vol_count_dat, by="Date_time") %>%
+  mutate(MedHHInc = replace_na(Temperature, 0),
+         MedRent = replace_na(MedRent,0),
+         pctBachelors= replace_na(pctBachelors,0),
+         pctHis= replace_na(pctHis,0),
+         pctOwnerHH= replace_na(pctOwnerHH,0),
+         pctCarCommute= replace_na(pctCarCommute,0),
+         pctHH200kOrMore= replace_na(pctHH200kOrMore,0))
 
 # plot call volume
 ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
@@ -159,7 +169,7 @@ vb_boundary <-
   st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
   st_transform('EPSG:6595')
 
-mapview::mapview(vb_boundary)
+mapview::mapview(main_ems.sf)
 
 vb_tracts <- 
   st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
@@ -753,6 +763,12 @@ ggplot(data = main_ems.sf %>%
   labs(title= "Average Response Time Difference of Fire-related EMS Calls") +
   plotTheme
 
+
+
+##GET RID OF NAs
+main_ems.sf <- main_ems.sf %>%
+  drop_na()
+
 # CORRELATIONS
 selected_vars <- 
   select(st_drop_geometry(main_ems.sf), ResponseTime, CallPriority, CallVolume, 
@@ -794,8 +810,176 @@ step(lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                          week, dotw, time_of_day, times.x, holiday, season, weekend, SnowPresent, HeavyRain, StrongWind)), 
      direction="backward")
 
-reg2 <- lm(formula = ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+reg2 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
      dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn,fire_stations_nn, b_advanced_life_support, b_chief_dispatch, b_special_event,
                    b_air_dispatch, b_water_dispatch, b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, week, dotw, times.x,
                    holiday, season, SnowPresent, HeavyRain, StrongWind))
 summary(reg2)
+
+
+
+##RESULTS
+
+# set random seed
+set.seed(31337)
+
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = paste(main_ems.sf$Zipcode),
+  p = .60, list = FALSE)
+# split data into training and test
+vb_training <- main_ems.sf[inTrain,] 
+vb_test     <- main_ems.sf[-inTrain,]  
+
+#Regression
+reg_final_train <- lm(ResponseTime ~ ., data = st_drop_geometry(vb_training) %>% 
+                        dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn,fire_stations_nn, b_advanced_life_support, b_chief_dispatch, b_special_event,
+                                      b_air_dispatch, b_water_dispatch, b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, week, dotw, times.x,
+                                      holiday, season, SnowPresent, HeavyRain, StrongWind))
+
+
+##### PREDICTION #####
+
+## predicting on new data
+reg_final_predict <- predict(reg_final_train, newdata = vb_test)
+
+## Mean Square Error train and test
+rmse.train <- caret::MAE(predict(reg_final_train), vb_training$ResponseTime)
+rmse.test  <- caret::MAE(reg_final_predict, vb_test$ResponseTime)
+
+cat("Train MAE: ", (rmse.train), " \n","Test MAE: ", (rmse.test))
+
+#Plotting accuracy metrics
+preds.train <- data.frame(pred   = predict(reg_final_train),
+                          actual = vb_training$ResponseTime,
+                          source = "training data")
+preds.test  <- data.frame(pred   = reg_final_predict,
+                          actual = vb_test$ResponseTime,
+                          source = "testing data")
+preds <- rbind(preds.train, preds.test)
+
+ggplot(preds, aes(x = actual, y = pred, color = source)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  facet_wrap(~source, ncol = 2) +
+  labs(title = "Comparing predictions to actual ResponeTime for the test set and the training set",
+       caption="Predicted ResponeTime as a Function of Observed ResponseTime for the Test Set and the Training Set",
+       x = "Actual ResponseTime",
+       y = "Predicted Response") +
+  plotTheme +
+  theme(
+    legend.position = "none"
+  )
+
+ggplot(preds, aes(x = actual, y = pred)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  labs(title = "Comparing predictions to actual response times for all calls",
+       caption="Predicted response time as a Function of Observed response time",
+       x = "Actual ResponseTime",
+       y = "Predicted ResponseTime") +
+  plotTheme
+
+
+########### CROSS- VALIDATION ##########
+
+#Generalizability - cross validation
+fitControl <- trainControl(method = "cv", number = 100, savePredictions = TRUE)
+set.seed(825)
+
+reg.cv <- 
+  train(ResponseTime ~ ., data = st_drop_geometry(vb_training) %>% 
+             dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn,fire_stations_nn, b_advanced_life_support, b_chief_dispatch, b_special_event,
+                           b_air_dispatch, b_water_dispatch, b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, week, dotw, times.x,
+                           holiday, season, SnowPresent, HeavyRain, StrongWind), 
+        method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+reg.cv$resample
+
+reg.cv$resample %>% 
+  pivot_longer(-Resample) %>% 
+  mutate(name = as.factor(name)) %>% 
+  ggplot(., aes(x = name, y = value, color = name)) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(~name, ncol = 3, scales = "free") +
+  theme_bw() +
+  theme(
+    legend.position = "none"
+  )
+
+reg.cv.dataframe<-
+  reg.cv$resample %>% 
+  dplyr::select(MAE) %>%
+  data.frame()
+
+
+ggplot(reg.cv.dataframe, aes(x=MAE)) +
+  geom_histogram(fill = "darkblue") +
+  labs(title="Distribution of Mean Average Error from 100 Fold Test",
+       x="Mean Average Error", 
+       y="Frequency")+
+  plotTheme
+
+
+
+# extract predictions from CV object
+cv_preds <- reg.cv$pred
+nrow(main_ems.sf)
+nrow(cv_preds)
+
+#Create dataset with "out of fold" predictions and original data
+map_preds <- main_ems.sf %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(ResponseTime.AbsError = abs(pred - ResponseTime)) %>% 
+  cbind(st_coordinates((.)))
+
+st_crs(map_preds) <- st_crs(vb_tracts)
+
+# plot errors on a map
+ggplot() +
+  geom_sf(data = vb_tracts, fill = "grey40") +
+  geom_sf(data = map_preds, aes(colour = q5(ResponseTime.AbsError)),
+          show.legend = "point", size = 1) +
+  scale_colour_manual(values = palette5,
+                      labels=qBr(map_preds,"ResponseTime.AbsError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Absolute Response time errors on the OOF set",
+       subtitle = "OOF = 'Out Of Fold'") +
+  mapTheme
+
+#errors
+vb_test <-
+  vb_test %>%
+  mutate(Regression = "Baseline Regression",
+         ResponseTime.Predict = ifelse((predict(reg_final_train, vb_test)) < 0, mean(vb_training$ResponseTime), predict(reg_final_train, vb_test)),
+         ResponseTime.Error = ResponseTime.Predict - ResponseTime,
+         ResponseTime.AbsError = abs(ResponseTime.Predict - ResponseTime),
+         ResponseTime.APE = (abs(ResponseTime.Predict - ResponseTime)) / abs(ResponseTime.Predict))%>%
+  mutate(ResponseTime.AbsError = replace_na(ResponseTime.AbsError, 0))%>%
+  mutate(ResponseTime.Error=replace_na(ResponseTime.Error, 0))
+
+
+
+summary(vb_test$ResponseTime.AbsError)
+summary(vb_test$ResponseTime.APE)
+
+#table of MAE and MAPE for single test set
+vb_test%>%
+  st_drop_geometry()%>%
+  summarize(Mean_Absolute_Error = mean(ResponseTime.AbsError, na.rm = T),
+            Mean_Absolute_Percentage_Error=mean(ResponseTime.APE, na.rm=T)) %>%
+  dplyr::select(Mean_Absolute_Error, Mean_Absolute_Percentage_Error)%>%
+  kable(caption = "Figure x. Mean Absolute Error and Mean Absolute Percentage Error for the Test Set") %>%
+  kable_styling("striped", full_width = F)
+
+
+
