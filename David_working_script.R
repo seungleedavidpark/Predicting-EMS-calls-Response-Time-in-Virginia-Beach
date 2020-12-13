@@ -112,7 +112,7 @@ main_ems.sf <- main_ems.sf %>%
   mutate(interval60 = floor_date(mdy_hm(CallDateandTime), unit = "60 mins"),
          interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
          week = week(interval60),
-         dotw = wday(interval60, label=TRUE)) %>%
+         dotw = as.character(wday(interval60, label=TRUE))) %>%
   mutate(ResponseTime =  as.numeric(difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min"))) %>%
   mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
                                  hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
@@ -195,23 +195,6 @@ fire_stations <- st_read('Fire_Stations.shp') %>%
 
 
 # create voronoi (still needs work)
-
-ems_stations <- ems_stations %>%
-  dplyr::mutate(lat = sf::st_coordinates(.)[,1],
-                lon = sf::st_coordinates(.)[,2])
-
-
-vb_map <- ggplot() + 
-  geom_sf(data = vb_boundary, fill = "black") +
-  geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white")
-
-
-
-vb_map +
-  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary, alpha=0.9
-               )
-#####
-
 bbox_polygon <- function(x) {
   bb <- sf::st_bbox(x)
   
@@ -227,8 +210,6 @@ bbox_polygon <- function(x) {
   sf::st_polygon(list(p))
 }
 
-vb_boundary
-ems_stations
 box <- st_sfc(bbox_polygon(vb_boundary))
 
 v <- st_voronoi(st_union(ems_stations), box)
@@ -239,15 +220,6 @@ voronoi_polygon <- (st_intersection(st_cast(v), st_union(vb_boundary)))
 plot(voronoi_polygon)
 # clip to smaller box
 plot(ems_stations, add = TRUE)
-
-ggplot() + 
-  geom_sf(data = voronoi_polygon) +
-  geom_sf(data = ResponseTime_net %>%
-            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
-  scale_fill_viridis_c(option="plasma") +
-  geom_sf(data = ems_stations, color="white") +
-  labs(title= "Response Time of EMS calls by fishnet") +
-  mapTheme
 
 # create nn features
 main_ems.sf <- main_ems.sf %>%
@@ -567,15 +539,226 @@ ggplot(main_ems.sf, aes(x=ResponseTime)) +
 ### ends with DR, starts with INS, starts with JTSKI, starts with CART, starts with TAC, BAT, SPEC, 
 ### NE, BKTEM, SQ, FB, ends with S
 
-# create a voronoi diagram for the EMS stations
+main_ems.sf$advanced_life_support <- ifelse (
+  (
+    endsWith(main_ems.sf$RescueSquad.Number, 'S') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'Z') |
+      endsWith(main_ems.sf$RescueSquad.Number, 'P') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'MED')
+  ), 
+  "Advanced Life Support", "Not Advanced Life Support"
+)
 
-ggplot() + 
-  geom_bar(main_ems.sf, aes(x=RescueSquad.Number))
+main_ems.sf$b_advanced_life_support <- ifelse (
+  (
+    endsWith(main_ems.sf$RescueSquad.Number, 'S') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'Z') |
+      endsWith(main_ems.sf$RescueSquad.Number, 'P') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'MED')
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(advanced_life_support) %>%
+         drop_na(advanced_life_support) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=advanced_life_support, y=meanResponeTime, fill=advanced_life_support), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls requiring Advanced Life Support") +
+  plotTheme
+
+main_ems.sf$chief_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'ECH') |
+      (((startsWith(main_ems.sf$RescueSquad.Number, 'CAR')) == TRUE) & ((startsWith(main_ems.sf$RescueSquad.Number, 'CART')) == FALSE)) |
+      startsWith(main_ems.sf$RescueSquad.Number, 'BAT')
+  ), 
+  "Chief Dispatched", "Cheif not Dispatched"
+)
+
+main_ems.sf$b_chief_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'ECH') |
+      (((startsWith(main_ems.sf$RescueSquad.Number, 'CAR')) == TRUE) & ((startsWith(main_ems.sf$RescueSquad.Number, 'CART')) == FALSE)) |
+      startsWith(main_ems.sf$RescueSquad.Number, 'BAT')
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(chief_dispatch) %>%
+         drop_na(chief_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=chief_dispatch, y=meanResponeTime, fill=chief_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls needing a Chief") +
+  plotTheme
+
+main_ems.sf$special_event <- ifelse (
+  (
+    main_ems.sf$RescueSquad.Number == 'BKTEAM' |
+      main_ems.sf$RescueSquad.Number == 'EMSOPS' |
+      startsWith(main_ems.sf$RescueSquad.Number, 'CART')
+  ), 
+  "Special Event", "Not Special Event"
+)
+
+main_ems.sf$b_special_event <- ifelse (
+  (
+    main_ems.sf$RescueSquad.Number == 'BKTEAM' |
+      main_ems.sf$RescueSquad.Number == 'EMSOPS' |
+      startsWith(main_ems.sf$RescueSquad.Number, 'CART')
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(special_event) %>%
+         drop_na(special_event) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=special_event, y=meanResponeTime, fill=special_event), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls at Special Events") +
+  plotTheme
+
+main_ems.sf$air_dispatch <- ifelse (
+  (
+    main_ems.sf$RescueSquad.Number == 'AIRMED'
+  ), 
+  "Air unit", "Not an Air Unit"
+)
+
+main_ems.sf$b_air_dispatch <- ifelse (
+  (
+    main_ems.sf$RescueSquad.Number == 'AIRMED'
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(air_dispatch) %>%
+         drop_na(air_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=air_dispatch, y=meanResponeTime, fill=air_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of EMS Calls Using Helicopter Ambulances") +
+  plotTheme
+
+main_ems.sf$hold_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'HOLD')
+  ), 
+  "Held By Dispatcher", "Not Held by Dispatcher"
+)
+
+main_ems.sf$b_hold_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'HOLD')
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(hold_dispatch) %>%
+         drop_na(hold_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=hold_dispatch, y=meanResponeTime, fill=hold_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) +
+  labs(title= "Average Response Time Difference of EMS Calls on HOLD by Dispatcher") +
+  plotTheme
+
+main_ems.sf$water_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'FBOA') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'RB') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'MRTK') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'JTSKI')
+    
+  ), 
+  "Water Unit", "Not a Water Unit"
+)
+
+main_ems.sf$b_water_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'FBOA') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'RB') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'MRTK') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'JTSKI')
+    
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(water_dispatch) %>%
+         drop_na(water_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=water_dispatch, y=meanResponeTime, fill=water_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Marine EMS Calls") +
+  plotTheme
+
+main_ems.sf$mass_casualty_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'MCI') 
+  ), 
+  "Mass Casualty Incident", "Not a Mass Casualty Incident"
+)
+
+main_ems.sf$b_mass_casualty_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'MCI') 
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(mass_casualty_dispatch) %>%
+         drop_na(mass_casualty_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=mass_casualty_dispatch, y=meanResponeTime, fill=mass_casualty_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Mass Casualty EMS Calls") +
+  plotTheme
+
+main_ems.sf$fire_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'L') |
+      (startsWith(main_ems.sf$RescueSquad.Number, 'E') & ((startsWith(main_ems.sf$RescueSquad.Number, 'ECH') == FALSE) & (main_ems.sf$RescueSquad.Number != 'EMSOPS'))) |
+      (startsWith(main_ems.sf$RescueSquad.Number, 'T') & (startsWith(main_ems.sf$RescueSquad.Number, 'TAC') == FALSE)) |
+      endsWith(main_ems.sf$RescueSquad.Number, 'F') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'NE')
+  ), 
+  "Fire Team Dispactched", "Fire Team not Dispatched"
+)
+
+main_ems.sf$b_fire_dispatch <- ifelse (
+  (
+    startsWith(main_ems.sf$RescueSquad.Number, 'L') |
+      (startsWith(main_ems.sf$RescueSquad.Number, 'E') & ((startsWith(main_ems.sf$RescueSquad.Number, 'ECH') == FALSE) & (main_ems.sf$RescueSquad.Number != 'EMSOPS'))) |
+      (startsWith(main_ems.sf$RescueSquad.Number, 'T') & (startsWith(main_ems.sf$RescueSquad.Number, 'TAC') == FALSE)) |
+      endsWith(main_ems.sf$RescueSquad.Number, 'F') |
+      startsWith(main_ems.sf$RescueSquad.Number, 'NE')
+  ), 
+  1, 0
+)
+
+ggplot(data = main_ems.sf %>%
+         group_by(fire_dispatch) %>%
+         drop_na(fire_dispatch) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=fire_dispatch, y=meanResponeTime, fill=fire_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE) +
+  scale_fill_manual(values = palette2) + 
+  labs(title= "Average Response Time Difference of Fire-related EMS Calls") +
+  plotTheme
 
 # CORRELATIONS
 selected_vars <- 
-  select(st_drop_geometry(main_ems.sf), ResponseTime, CallPriority,CallVolume, 
-         ems_station_nn, hospitals_nn, fire_stations_nn) %>% 
+  select(st_drop_geometry(main_ems.sf), ResponseTime, CallPriority, CallVolume, 
+         ems_station_nn, hospitals_nn, fire_stations_nn, b_advanced_life_support, 
+         b_chief_dispatch, b_special_event, b_air_dispatch, b_hold_dispatch, b_water_dispatch, 
+         b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, Wind_Speed, Humidity) %>% 
   na.omit()
 
 ggcorrplot(
@@ -588,5 +771,31 @@ ggcorrplot(
        caption="Correlation Plot")
 
 # TESTING MODEL 
+main_ems.sf$dotw <- factor(main_ems.sf$dotw, levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
+main_ems.sf$dotw <- relevel(main_ems.sf$dotw, ref = "Mon")
+
+
+
 reg1 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
-             dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn, hospitals_nn, fire_stations_nn, ))
+             dplyr::select(ResponseTime, CallPriority, CallVolume, 
+                           ems_station_nn, hospitals_nn, fire_stations_nn, b_advanced_life_support, 
+                           b_chief_dispatch, b_special_event, b_air_dispatch, b_hold_dispatch, b_water_dispatch, 
+                           b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, Wind_Speed, Humidity, 
+                           week, dotw, time_of_day, times.x, holiday, season, weekend, SnowPresent, HeavyRain, StrongWind))
+summary(reg1)
+
+
+#stepwise
+step(lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+           dplyr::select(ResponseTime, CallPriority, CallVolume, 
+                         ems_station_nn, hospitals_nn, fire_stations_nn, b_advanced_life_support, 
+                         b_chief_dispatch, b_special_event, b_air_dispatch, b_hold_dispatch, b_water_dispatch, 
+                         b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, Wind_Speed, Humidity, 
+                         week, dotw, time_of_day, times.x, holiday, season, weekend, SnowPresent, HeavyRain, StrongWind)), 
+     direction="backward")
+
+reg2 <- lm(formula = ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+     dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn,fire_stations_nn, b_advanced_life_support, b_chief_dispatch, b_special_event,
+                   b_air_dispatch, b_water_dispatch, b_mass_casualty_dispatch, b_fire_dispatch, Temperature, Precipitation, week, dotw, times.x,
+                   holiday, season, SnowPresent, HeavyRain, StrongWind))
+summary(reg2)
