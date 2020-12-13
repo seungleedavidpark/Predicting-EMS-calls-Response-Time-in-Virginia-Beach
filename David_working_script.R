@@ -16,6 +16,7 @@ library(measurements)
 library(mapboxapi)
 library(FNN)
 library(ggvoronoi)
+library(ggcorrplot)
 
 # Set up plot and map themes
 plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
@@ -204,13 +205,49 @@ vb_map <- ggplot() +
   geom_sf(data = vb_boundary, fill = "black") +
   geom_sf(data = ems_stations, color="white", size =1, shape = 23, fill = "white")
 
-vb_map +
-  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary)
 
 
 vb_map +
-  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary)
+  geom_voronoi(data = ems_stations, aes(x=lat, y=lon), na.rm=TRUE, outline = vb_boundary, alpha=0.9
+               )
+#####
 
+bbox_polygon <- function(x) {
+  bb <- sf::st_bbox(x)
+  
+  p <- matrix(
+    c(bb["xmin"], bb["ymin"], 
+      bb["xmin"], bb["ymax"],
+      bb["xmax"], bb["ymax"], 
+      bb["xmax"], bb["ymin"], 
+      bb["xmin"], bb["ymin"]),
+    ncol = 2, byrow = T
+  )
+  
+  sf::st_polygon(list(p))
+}
+
+vb_boundary
+ems_stations
+box <- st_sfc(bbox_polygon(vb_boundary))
+
+v <- st_voronoi(st_union(ems_stations), box)
+plot(v, col = 0)
+
+voronoi_polygon <- (st_intersection(st_cast(v), st_union(vb_boundary)))
+
+plot(voronoi_polygon)
+# clip to smaller box
+plot(ems_stations, add = TRUE)
+
+ggplot() + 
+  geom_sf(data = voronoi_polygon) +
+  geom_sf(data = ResponseTime_net %>%
+            dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+  scale_fill_viridis_c(option="plasma") +
+  geom_sf(data = ems_stations, color="white") +
+  labs(title= "Response Time of EMS calls by fishnet") +
+  mapTheme
 
 # create nn features
 main_ems.sf <- main_ems.sf %>%
@@ -330,7 +367,67 @@ ggplot(data = main_ems.sf %>%
   geom_bar(aes(x=CallPriority, y=meanResponeTime, fill=CallPriority), stat="identity", position=position_dodge(), show.legend = FALSE) +
   plotTheme
 
+# Load census (pop_density, med_age, race, poverty, income, education, commute)
+census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
+selected_vars <- c("B01003_001E", # Total Population
+                   "B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
+                   "B02001_002E", # People describing themselves as "white alone"
+                   "B02001_003E", # People describing themselves as "black" or "african-american" alone
+                   "B15001_050E", # Females with bachelors degrees
+                   "B15001_009E", # Males with bachelors degrees
+                   "B19013_001E", # Median HH income
+                   "B25058_001E", # Median rent
+                   "B06012_002E", # Total poverty
+                   "B08301_001E", # People who have means of transportation to work
+                   "B08301_002E", # Total people who commute by car, truck, or van
+                   "B08301_010E", # Total people who commute by public transportation"
+                   "B03002_012E", # Estimate Total Hispanic or Latino by race
+                   "B19326_001E", # Median income in past 12 months (inflation-adjusted)
+                   "B07013_001E", # Total households
+                   "B08013_001E", # Travel Time to Work
+                   "B01002_001E") # Median Age
 
+vb_census <- 
+  get_acs(geography = "tract", 
+          variables = selected_vars, 
+          year=2018, 
+          state="VA",
+          county = c("Virginia Beach"),
+          geometry=T, 
+          output="wide") %>%
+  st_transform('EPSG:6595') %>%
+  rename(TotalPop = B01003_001E,
+         Med_Age = B01002_001E,
+         Race_TotalPop = B02001_001E, 
+         Whites = B02001_002E,
+         Blacks = B02001_003E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E,
+         TotalPoverty = B06012_002E,
+         TotalCommute = B08301_001E,
+         CarCommute = B08301_002E,
+         PubCommute = B08301_010E,
+         TotalHispanic = B03002_012E,
+         MedInc = B19326_001E,
+         TotalHH = B07013_001E)
+vb_census <- vb_census %>%
+  dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
+  mutate(Area = st_area(vb_census),
+         pctWhite = (ifelse(Race_TotalPop > 0, Whites / Race_TotalPop,0))*100,
+         pctBlack = (ifelse(Race_TotalPop > 0, Blacks / Race_TotalPop,0))*100,
+         pctHis = (ifelse(Race_TotalPop >0, TotalHispanic/Race_TotalPop,0))*100,
+         pctBachelors = (ifelse(Race_TotalPop > 0, ((FemaleBachelors + MaleBachelors) / Race_TotalPop),0)) *100,
+         pctPoverty = (ifelse(Race_TotalPop > 0, TotalPoverty / Race_TotalPop, 0))*100,
+         pctCarCommute = (ifelse(TotalCommute > 0, CarCommute / TotalCommute,0))*100,
+         pctPubCommute = (ifelse(TotalCommute > 0, PubCommute / TotalCommute,0))*100,
+         year = "2018") %>%
+  mutate(MedHHInc = replace_na(MedHHInc, 0),
+         pctBachelors= replace_na(pctBachelors,0),
+         pctHis= replace_na(pctHis,0),
+         pctCarCommute= replace_na(pctCarCommute,0),
+         PopDens = (TotalPop/(Area/27878400))) %>%
+  dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
 # Load weather data and create features
 vb_weather <- 
@@ -348,7 +445,7 @@ vb_weather <-
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature)) %>%
   mutate(SnowPresent = ifelse(Precipitation > 0.0 & Temperature < 32.0, "Snow", "NoSnow"),
          HeavyRain = ifelse(Precipitation > 0.5, "HeavyRain", "NoHeavyRain"),
-         Hurricane = ifelse(Wind_Speed > 74, "Hurricane","NoHurricane"))
+         StrongWind = ifelse(Wind_Speed > 30, "StrongWind","NoStrongWind"))
 
 # join weather data to the main dataframe
 main_ems.sf <-
@@ -393,7 +490,8 @@ grid.arrange(
     plotTheme
 )
 
-#plot snow and heavy rain days
+# plot snow and heavy rain days
+
 grid.arrange(
   ggplot(data = main_ems.sf %>%
            group_by(SnowPresent) %>%
@@ -408,6 +506,33 @@ grid.arrange(
            summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=HeavyRain, y=meanResponeTime, fill=HeavyRain), stat="identity", position=position_dodge(), show.legend = FALSE) +
     scale_fill_manual(values = palette2) + 
+    plotTheme,
+  ggplot(data = main_ems.sf %>%
+           group_by(StrongWind) %>%
+           drop_na(StrongWind) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=StrongWind, y=meanResponeTime, fill=StrongWind), stat="identity", position=position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = palette2) + 
+    plotTheme
+)
+
+
+#plot Holiday and season
+
+grid.arrange(
+  ggplot(data = main_ems.sf %>%
+           group_by(holiday) %>%
+           drop_na(holiday) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=holiday, y=meanResponeTime, fill=holiday), stat="identity", position=position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = palette2) + 
+    plotTheme,
+  ggplot(data = main_ems.sf %>%
+           group_by(season) %>%
+           drop_na(season) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=season, y=meanResponeTime, fill=season), stat="identity", position=position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = palette4) + 
     plotTheme
 )
 
@@ -447,3 +572,21 @@ ggplot(main_ems.sf, aes(x=ResponseTime)) +
 ggplot() + 
   geom_bar(main_ems.sf, aes(x=RescueSquad.Number))
 
+# CORRELATIONS
+selected_vars <- 
+  select(st_drop_geometry(main_ems.sf), ResponseTime, CallPriority,CallVolume, 
+         ems_station_nn, hospitals_nn, fire_stations_nn) %>% 
+  na.omit()
+
+ggcorrplot(
+  round(cor(selected_vars), 1), 
+  p.mat = cor_pmat(selected_vars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation over selected features",
+       caption="Correlation Plot")
+
+# TESTING MODEL 
+reg1 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+             dplyr::select(ResponseTime, CallPriority, CallVolume, ems_station_nn, hospitals_nn, fire_stations_nn, ))
