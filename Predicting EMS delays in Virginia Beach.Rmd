@@ -10,8 +10,6 @@ output:
     toc: true
     toc_float:
       collapsed: false
-
-
 ---
 
 # 1. Introduction
@@ -59,7 +57,7 @@ plotTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    axis.ticks=element_blank())
 
 gridTheme <- theme(text = element_text( family = "Avenir", color = "black"),
-                   plot.title =element_text(size=6, face = "bold"),
+                   plot.title =element_text(size=8, face = "bold"),
                    plot.subtitle = element_text(size=5),
                    plot.caption = element_text(size = 5),
                    axis.text.x = element_text(size = 6),
@@ -75,7 +73,7 @@ gridTheme <- theme(text = element_text( family = "Avenir", color = "black"),
                    axis.ticks=element_blank())
 
 mapTheme <- theme(text = element_text( family = "Avenir", color = "black"),
-                  plot.title =element_text(size=20),
+                  plot.title =element_text(size=13),
                   plot.subtitle = element_text(size=7),
                   plot.caption = element_text(size = 5),
                   axis.line=element_blank(),
@@ -127,8 +125,8 @@ nn_function <- function(measureFrom,measureTo,k) {
   return(output)  
 }
 
-# kloat color palettes
-palette5 <- c("#03254c","#1167b1","#187bcd","#2a9df4","#d0efff")
+# load color palettes
+palette5 <- c("#03254c","#1167b1","#64b5f6","#2196f3","#bbdefb")
 palette4 <- c("#3a7d7c","#ffa137","#ff4400","#065125")
 palette2 <- c("#03254c","#187bcd")
 palette1 <- c("#03254c")
@@ -139,21 +137,23 @@ my_token <- "pk.eyJ1IjoiZ2F1bHQzNCIsImEiOiJja2ZsbWd5cm8xNDBsMnlwajMzbW15c2Y0In0.
 
 # 2. Data
 
-```{r}
+```{r, include=FALSE, message=FALSE, warning=FALSE}
 datasource_table <-data.frame(
   Datasets = c("Virginia Beach EMS calls data", "Tract level U.S. Census demographic data", "Weather data", "Tract level chronic disease and health outcome data"),
   Source = c("Provided by class", "U.S. Census Bureau", "Riem package which gather weather data from \n Automated Surface Observing System (ASOS) stations (airports)", "Center for Disease Control and Prevention")
 )
 
 kbl(datasource_table, caption ="<b>Datasets used<b>") %>%
-  kable_paper(c("hover", "condensed"), full_width = F, html_font = "Avenir") %>%
+  kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
-  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 14) %>%
   column_spec(1, bold = T)
 ```
 
+Our main dataset was provided by the class, which has the time and other characteristics of the EMS calls in Virginia Beach during January 2017 through February 2018. In the following section, we will discuss further about the feature engineering process using the data from this dataset. Additionally, we have used **tract level U.S. Census demographic data** from the U.S. Census Bureau, **weather data at the time of the calls** using the `reim` package, and **tract level chronic disease and health outcome data** from the Center for Disease Control and Prevention. We have selected these datasets to better understand the what factors may contribute to the **response time** of an EMS call. 
+
 ### 2.1. Loading main EMS data
-```{r, load the main dataset}
+```{r, load the main dataset, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 # load main dataset and make it an SF object
 main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
 main_ems.sf <- main_ems %>%
@@ -162,17 +162,19 @@ main_ems.sf <- main_ems %>%
   st_transform('EPSG:6595')
 ```
 
+The main EMS dataset (`main_ems.sf`) includes a various temporal and other characteristics of the individual EMS calls. Using the temporal features in the dataset, we have engineered the following list of features including `ResponseTime`, our main feature we hope to be able to predict. We have engineered these features to find any factors that may be helpful in predicting the `ResponesTime` of the EMS calls. We have also created `CallVollume` feature, which aggregates the number of calls during the 3 hour periods where the individual calls falls under. For example, `CallVolume` value for an EMS call at **2pm on January 21, 2017**, will be the total number of EMS calls during **the period of 12pm to 3pm on January 21, 2017**. 
+
 ```{r, time feature table, results='asis'}
 timefeatures_table <-data.frame(
-  Features = c("ResponseTime", "time_of_day", "times", "dotw", "weekend", "CallVolume"),
-  Description = c("Time from the initial call to EMS arriving at scene", "6 hour periods (Overnight, Morning, Afternoon, Evening)", "3 hour periods (one-three, three-six, six-nine, nine-twelve, twelve-fifteen, fifteen-eighteen, eighteen-twentyone,twentyone-twentyfour)", "Day of the week", "weekend", "Number of calls during the 3 hour period"),
-  Type = c("Continous","Categorical", "Categorical", "Categorical", "Binary", "Continous")
+  Features = c("ResponseTime", "time_of_day", "times", "dotw", "weekend", "CallVolume", "season", "holiday"),
+  Description = c("Time from the initial call to EMS arriving at scene", "6 hour periods of a day (Overnight, Morning, Afternoon, Evening)", "3 hour periods of a day (one-three, three-six, six-nine, nine-twelve, twelve-fifteen, fifteen-eighteen, eighteen-twentyone,twentyone-twentyfour)", "Day of the week", "weekend", "Number of calls during the 3 hour period", "Spring, Summer, Fall, or Winter", "Includes major holidays - New Years Day, Martin Luther King Jr. Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, and Christmas Day"),
+  Type = c("Continous","Categorical", "Categorical", "Categorical", "Binary", "Continous", "Binary", "Binary")
 )
 
 kbl(timefeatures_table, caption ="<b>Engineered temporal features<b>") %>%
-  kable_paper(c("hover", "condensed"), full_width = F, html_font = "Avenir") %>%
+  kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
-  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 14) %>%
   column_spec(1, bold = T)
 ```
 
@@ -186,7 +188,7 @@ main_ems.sf <- main_ems.sf %>%
   mutate(interval60 = floor_date(mdy_hm(CallDateandTime), unit = "60 mins"),
          interval30 = floor_date(mdy_hm(CallDateandTime), unit = "30 mins"),
          week = week(interval60),
-         dotw = wday(interval60, label=TRUE)) %>%
+         dotw = as.character(wday(interval60, label=TRUE))) %>%
   mutate(ResponseTime =  as.numeric(difftime(mdy_hm(OnSceneDateandTime), mdy_hm(CallDateandTime), units = "min"))) %>%
   mutate(time_of_day = case_when(hour(interval60) >= 0 & hour(interval60) < 6 ~ "Overnight",
                                  hour(interval60) >= 6 & hour(interval60) < 12 ~ "Morning",
@@ -201,13 +203,19 @@ main_ems.sf <- main_ems.sf %>%
                            hour(interval60) >= 18 & hour(interval60) < 21 ~ "eighteen-twentyone",
                            hour(interval60) >= 21 & hour(interval60) <= 24 ~ "twentyone-twentyfour")) %>%
   mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")) %>%
-  mutate(Date = substring(CallDateandTime,1,6)) %>%
+  mutate(season = case_when(week >= 1 & week < 10 ~ "Winter",
+                            week >= 10 & week < 23 ~ "Spring",
+                            week >= 23 & week < 40 ~ "Summer",
+                            week >= 40 & week < 47 ~ "Fall", 
+                            week >= 47 & week <= 52 ~ "Winter")) %>%
+  mutate(Date = substring(CallDateandTime,1,7)) %>%
   unite(Date_timeofday, c(Date, time_of_day), sep = " ", remove = FALSE) %>%
-  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+  unite(Date_time, c(Date, times), sep = " ", remove = FALSE) %>%
+  mutate(holiday = ifelse(Date %in% c("1/2/17 ", "1/16/17", "5/29/17", "7/4/17 ", "9/4/17 ", "11/23/1", "12/25/1", "1/1/18 ", "1/15/18"), "Holiday", "Non-Holiday"))
 
 ```
 
-```{r, call volume}
+```{r, call volume, message=FALSE, warning=FALSE}
 # create call volume column
 vol_count_dat <- main_ems.sf %>%
   st_drop_geometry() %>%
@@ -220,7 +228,8 @@ main_ems.sf <-
   left_join(main_ems.sf, vol_count_dat, by="Date_time")
 ```
 
-Rescue Squad type feature engineering
+Additionally, the `main_ems.sf` dataset includes a column with `RescueSquad.Number`. Each EMS calls are coded with the characteristics of the calls and the units that responded to the scene. We were able to contact one of the chiefs of the Virginia Beach EMS stations who was able to provide the description of these rescue squad codes. With that information, we have categorized the rescue squad types into a simpler categories, which you can see from the list below.
+
 ```{r, rescue squad feature table}
 RescueSquad_table <-data.frame(
   Features = c("advanced_life_support", "chief_dispatch", "special_event", "air_dispatch", "hold_dispatch", "water_dispatch", "mass_casualty_dispatch", "fire_dispatch"),
@@ -229,9 +238,9 @@ RescueSquad_table <-data.frame(
 )
 
 kbl(RescueSquad_table , caption ="<b>Rescue squad types engineered features<b>") %>%
-  kable_paper(c("hover", "condensed"), full_width = F, html_font = "Avenir") %>%
+  kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
-  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 14) %>%
   column_spec(1, bold = T)
 ```
 
@@ -256,14 +265,6 @@ main_ems.sf$b_advanced_life_support <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(advanced_life_support) %>%
-         drop_na(advanced_life_support) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=advanced_life_support, y=meanResponeTime, fill=advanced_life_support), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of EMS Calls requiring Advanced Life Support") +
-  plotTheme
 
 main_ems.sf$chief_dispatch <- ifelse (
   (
@@ -283,15 +284,6 @@ main_ems.sf$b_chief_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(chief_dispatch) %>%
-         drop_na(chief_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=chief_dispatch, y=meanResponeTime, fill=chief_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of EMS Calls needing a Chief") +
-  plotTheme
-
 main_ems.sf$special_event <- ifelse (
   (
     main_ems.sf$RescueSquad.Number == 'BKTEAM' |
@@ -310,14 +302,6 @@ main_ems.sf$b_special_event <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(special_event) %>%
-         drop_na(special_event) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=special_event, y=meanResponeTime, fill=special_event), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of EMS Calls at Special Events") +
-  plotTheme
 
 main_ems.sf$air_dispatch <- ifelse (
   (
@@ -333,15 +317,6 @@ main_ems.sf$b_air_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(air_dispatch) %>%
-         drop_na(air_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=air_dispatch, y=meanResponeTime, fill=air_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of EMS Calls Using Helicopter Ambulances") +
-  plotTheme
-
 main_ems.sf$hold_dispatch <- ifelse (
   (
     startsWith(main_ems.sf$RescueSquad.Number, 'HOLD')
@@ -356,14 +331,6 @@ main_ems.sf$b_hold_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(hold_dispatch) %>%
-         drop_na(hold_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=hold_dispatch, y=meanResponeTime, fill=hold_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) +
-  labs(title= "Average Response Time Difference of EMS Calls on HOLD by Dispatcher") +
-  plotTheme
 
 main_ems.sf$water_dispatch <- ifelse (
   (
@@ -387,14 +354,6 @@ main_ems.sf$b_water_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(water_dispatch) %>%
-         drop_na(water_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=water_dispatch, y=meanResponeTime, fill=water_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of Marine EMS Calls") +
-  plotTheme
 
 main_ems.sf$mass_casualty_dispatch <- ifelse (
   (
@@ -410,14 +369,6 @@ main_ems.sf$b_mass_casualty_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(mass_casualty_dispatch) %>%
-         drop_na(mass_casualty_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=mass_casualty_dispatch, y=meanResponeTime, fill=mass_casualty_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of Mass Casualty EMS Calls") +
-  plotTheme
 
 main_ems.sf$fire_dispatch <- ifelse (
   (
@@ -441,18 +392,11 @@ main_ems.sf$b_fire_dispatch <- ifelse (
   1, 0
 )
 
-ggplot(data = main_ems.sf %>%
-         group_by(fire_dispatch) %>%
-         drop_na(fire_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
-  geom_bar(aes(x=fire_dispatch, y=meanResponeTime, fill=fire_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
-  scale_fill_manual(values = palette2) + 
-  labs(title= "Average Response Time Difference of Fire-related EMS Calls") +
-  plotTheme
 ```
 
-### 2.4 Load spatial features
+### 2.2 Load spatial features
 
+We were also interested in the spatial features of the EMS calls. Using the locations of all **EMS stations**, **fire stations**, and **hospitals** in Virginia Beach, we have calculated the distance of the nearest locations of the three locations types through `nn_function`. Using this engineered feature, we will explore whether the distance to **EMS stations**, **fire stations**, or **hospitals** contribute to the `ResponseTime` of each calls.
 
 ```{r}
 nn_table <-data.frame(
@@ -461,14 +405,14 @@ nn_table <-data.frame(
   Type = c("Continuous","Continuous", "Continuous")
 )
 
-kbl(nn_table , caption ="<bEengineered distance features<b>") %>%
+kbl(nn_table , caption ="<b>Eengineered spatial features<b>") %>%
   kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
-  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 14) %>%
   column_spec(1, bold = T)
 ```
 
-```{r, loading map files}
+```{r, loading map files, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 # load VB boundary census tracts
 vb_boundary <-
   st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
@@ -506,9 +450,10 @@ fire_stations <- st_read('Fire_Stations.shp') %>%
   mutate(Legend = "fire_stations")
 ```
 
+Using the **EMS station** locations, we also created a **voronoi map** using the following function. Assuming the assignment of call dispatches depend on the closest EMS stations, the voronoi map of Virginia would allow us to understand if there are specific "**EMS station zone**" that are seeing either longer or shorter EMS response time. 
 
 ```{r}
-# create voronoi (still needs work)
+# create voronoi
 bbox_polygon <- function(x) {
   bb <- sf::st_bbox(x)
   
@@ -527,11 +472,7 @@ bbox_polygon <- function(x) {
 box <- st_sfc(bbox_polygon(vb_boundary))
 
 v <- st_voronoi(st_union(ems_stations), box)
-plot(v, col = 0)
-
 voronoi_polygon <- (st_intersection(st_cast(v), st_union(vb_boundary)))
-
-plot(voronoi_polygon)
 
 #convert sfc to sf and assign ID
 vb_voronoi = voronoi_polygon %>%
@@ -541,11 +482,17 @@ vb_voronoi = voronoi_polygon %>%
 
 #Assign Voronoi ID for each EMS call
 main_ems.sf <- st_join(main_ems.sf, vb_voronoi, left = TRUE)
+
+ggplot() + 
+  geom_sf(data = vb_voronoi, fill = "#1167b1") +
+  geom_sf(data = ems_stations, color="white") +
+  labs(title = "Virginia Beach EMS station zones \nusing voronoi function") +
+  mapTheme
 ```
 
+### 2.3 Load census and health data
 
-
-### 2.3 Load census data
+TEXT HERE
 
 ```{r}
 census_vars_table <-data.frame(
@@ -556,12 +503,12 @@ census_vars_table <-data.frame(
 kbl(census_vars_table , caption ="<b> U.S. Census features<b>") %>%
   kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
-  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 14) %>%
   column_spec(1, bold = T)
 ```
 
 
-```{r,load census data}
+```{r,load census data, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 # Load census (pop_density, med_age, race, poverty, income, education, commute)
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
 selected_vars <- c("B01003_001E", # Total Population
@@ -624,7 +571,6 @@ vb_census <- vb_census %>%
          PopDens = (TotalPop/(Area/27878400))) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 ```
-
 
 ```{r, load helth data}
 health_dat <- read.csv('health_data_500_cities_vabch.csv') %>% 
@@ -689,74 +635,12 @@ main_ems.sf <-st_join(main_ems.sf,vb_health, left =TRUE) %>%
   )
 ```
 
-### 2.4 Load spatial features
 
-```{r, loading map files}
-# load VB boundary census tracts
-vb_boundary <-
-  st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
-  st_transform('EPSG:6595')
+### 2.4 Load weather data
 
-# load VB tracts
-vb_tracts <- 
-  st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
-  subset(OBJECTID!= 22) %>%
-  st_transform('EPSG:6595')
+TEXT HERE
 
-#load ems stations hospitals and fire stations
-ems_stations <- st_read('201127_ems_geocoded.shp') %>%
-  st_transform(st_crs(vb_fishnet)) %>%
-  mutate(OBJECTID = osm_id) %>%
-  mutate(Legend = "ems_stations")
-
-hospitals <- st_read('Hospitals__Virginia_.shp') %>% 
-  dplyr::filter(City == 'Virginia Beach') %>%
-  st_transform(st_crs(vb_fishnet)) %>%
-  mutate(Legend = "hospitals")
-
-fire_stations <- st_read('Fire_Stations.shp') %>% 
-  dplyr::filter(CITY == 'Virginia Beach') %>%
-  st_transform(st_crs(vb_fishnet)) %>%
-  mutate(Legend = "fire_stations")
-```
-
-```{r}
-# create voronoi (still needs work)
-bbox_polygon <- function(x) {
-  bb <- sf::st_bbox(x)
-  
-  p <- matrix(
-    c(bb["xmin"], bb["ymin"], 
-      bb["xmin"], bb["ymax"],
-      bb["xmax"], bb["ymax"], 
-      bb["xmax"], bb["ymin"], 
-      bb["xmin"], bb["ymin"]),
-    ncol = 2, byrow = T
-  )
-  
-  sf::st_polygon(list(p))
-}
-
-box <- st_sfc(bbox_polygon(vb_boundary))
-
-v <- st_voronoi(st_union(ems_stations), box)
-plot(v, col = 0)
-
-voronoi_polygon <- (st_intersection(st_cast(v), st_union(vb_boundary)))
-
-#convert sfc to sf and assign ID
-vb_voronoi = voronoi_polygon %>%
-  st_sf %>%
-  st_cast %>%
-  dplyr::mutate(Voronoi_ID = row_number())
-
-#Assign Voronoi ID for each EMS call
-main_ems.sf <- st_join(main_ems.sf, vb_voronoi, left = TRUE)
-```
-
-
-### 2.3 load weather data
-```{r, load weather data}
+```{r, load weather data, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 # Load weather data and create features
 vb_weather <- 
   riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2018-03-01") %>%
@@ -786,9 +670,7 @@ main_ems.sf <- main_ems.sf %>%
 
 # 3. Exploratory Analysis
 
-### EMS calls
-- scatter plots of the calls y axis(response time))
-
+### EMS calls distribution
 
 ```{r}
 # create fishnet
@@ -815,18 +697,42 @@ vb_ems_fishnet <-
 ggplot() +
   geom_sf(data = vb_ems_fishnet, aes(fill = countEMS), color = NA) +
   scale_fill_viridis() +
-  labs(title = "Fishnet of EMS calls in Virginia Beach")
+  labs(title = "Fishnet of EMS calls in Virginia Beach") +
+  mapTheme
 ```
 
-```{r}
-ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
-  geom_point(size = .75, colour = "darkblue") +
-  labs(title= "Average Response Time by Call Volume") +
-  plotTheme
-```
-- fishnet maps of the calls distribution and responsetime
+### Distribution of Response time
 
-### 3.2 Response Time and Call Volume
+```{r, warning=FALSE, message=FALSE}
+# histogram of the ResponseTime
+ggplot(main_ems.sf, aes(x=ResponseTime)) +
+    geom_histogram(binwidth=1, fill = "darkblue") +
+    xlim(0, 50) +
+    labs(title="Histogram of all Response Time of EMS calls",
+         x="ResponseTime", 
+         y="Count")+
+    plotTheme
+# mapping all calls response time 
+ResponseTime_net <- 
+  main_ems.sf %>%
+  dplyr::select(ResponseTime, dotw, time_of_day) %>%
+  mutate(ResponseTime = as.numeric(ResponseTime)) %>% 
+  dplyr::select(ResponseTime) %>%
+  aggregate(., vb_fishnet, mean) %>%
+  mutate(ResponseTime = replace_na(ResponseTime, 0))
+#map of response time
+ggplot() + 
+    geom_sf(data = vb_boundary, fill = "black") +
+    geom_sf(data = ResponseTime_net %>%
+              dplyr::filter(ResponseTime > 0), color = NA, aes(fill = ResponseTime)) +
+    scale_fill_viridis_c(option="plasma") +
+    geom_sf(data = ems_stations, color="white") +
+    labs(title= "Response Time of EMS calls by fishnet") +
+    mapTheme
+
+```
+
+### Response Time by Call Volume
 
 ```{r}
 # plot call volume
@@ -836,10 +742,58 @@ ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
   plotTheme
 ```
 
+### Daily Response Time by time of the day
+
+![](files for presentation/Response Time Maps/daily_response_time.gif)
+
+```{r, warning=FALSE, message=FALSE}
+# map Response Time of EMS calls by days of the week and time of the day
+ggplot(data = main_ems.sf %>%
+         group_by(dotw, time_of_day) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=meanResponeTime, y=dotw, fill = time_of_day), stat="identity", position=position_dodge())+
+  scale_fill_manual(values = palette5) +
+  labs(title="Response Time of EMS calls by days of the week and time of the day",
+       x="ResponseTime", 
+       y="Day of the week")+
+  plotTheme
+```
+
+### Response Time by holidays and seasons
+
+```{r, warning=FALSE, message=FALSE}
+grid.arrange(
+  ggplot(data = main_ems.sf %>%
+           group_by(holiday) %>%
+           drop_na(holiday) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=holiday, y=meanResponeTime, fill=holiday), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+    scale_fill_manual(values = palette2) + 
+    gridTheme,
+  ggplot(data = main_ems.sf %>%
+           group_by(season) %>%
+           drop_na(season) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=season, y=meanResponeTime, fill=season), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+    scale_fill_manual(values = palette5) + 
+    gridTheme, 
+  ncol=2)
+```
+
+# ResponseTime by Call Priority type
+
+```{r, warning=FALSE, message=FALSE}
+# map meanResponseTime by CallPriority
+ggplot(data = main_ems.sf %>%
+         group_by(CallPriority) %>%
+         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+  geom_bar(aes(x=CallPriority, y=meanResponeTime, fill=CallPriority), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+  plotTheme
+```
 
 ### Response Time and Rescue Squad Types
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(advanced_life_support) %>%
@@ -917,6 +871,66 @@ grid.arrange(
 )
 
 ```
+
+### Response Time by waether
+
+we may not need this plot
+```{r, warning=FALSE, message=FALSE}
+grid.arrange(
+  ggplot(vb_weather, aes(interval60,Precipitation)) + geom_line(aes(),) + 
+    labs(title="Percipitation", x="Hour", y="Precipitation") + theme(legend.position = "none") + gridTheme,
+  ggplot(vb_weather, aes(interval60,Temperature)) + geom_line(aes(),) + 
+    labs(title="Temperature", x="Hour", y="Temperature") + theme(legend.position = "none") + gridTheme,
+  ggplot(vb_weather, aes(interval60,Humidity)) + geom_line(aes(),) + 
+    labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none") + gridTheme,
+  ggplot(vb_weather, aes(interval60,Wind_Speed)) + geom_line(aes(),) + 
+    labs(title="Wind_Speed", x="Hour", y="Wind_Speed")  + theme(legend.position = "none") + gridTheme,
+  top="Weather Data - Virginia Beach - January to August, 2017",
+  ncol=1, nrow =4)
+```
+```{r, warning=FALSE, message=FALSE}
+
+grid.arrange(
+  ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    gridTheme,
+  ggplot(main_ems.sf, aes(x=Temperature, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    gridTheme,
+  ggplot(main_ems.sf, aes(x=Wind_Speed, y=ResponseTime)) +
+    geom_point(size = .75, colour = "darkblue") +
+    gridTheme
+)
+```
+
+```{r, warning=FALSE, message=FALSE}
+grid.arrange(
+  ggplot(data = main_ems.sf %>%
+           group_by(SnowPresent) %>%
+           drop_na(SnowPresent) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=SnowPresent, y=meanResponeTime, fill=SnowPresent), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+    scale_fill_manual(values = palette2) + 
+    gridTheme,
+  ggplot(data = main_ems.sf %>%
+           group_by(HeavyRain) %>%
+           drop_na(HeavyRain) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=HeavyRain, y=meanResponeTime, fill=HeavyRain), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+    scale_fill_manual(values = palette2) + 
+    gridTheme,
+  ggplot(data = main_ems.sf %>%
+           group_by(StrongWind) %>%
+           drop_na(StrongWind) %>%
+           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+    geom_bar(aes(x=StrongWind, y=meanResponeTime, fill=StrongWind), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
+    scale_fill_manual(values = palette2) + 
+    gridTheme, 
+  nrow=1, ncol=3
+)
+```
+
+
 
 # 4. Model Building
 

@@ -449,7 +449,8 @@ grid.arrange(
     labs(title="Humidity", x="Hour", y="Humidity")  + theme(legend.position = "none"),
   ggplot(vb_weather, aes(interval60,Wind_Speed)) + geom_line(aes(),) + 
     labs(title="Wind_Speed", x="Hour", y="Wind_Speed")  + theme(legend.position = "none"),
-  top="Weather Data - Virginia Beach - January to August, 2017")
+  top="Weather Data - Virginia Beach - January to August, 2017",
+  ncol=1, nrow =4)
 
 # plot precipitation and response time
 ggplot(main_ems.sf, aes(x=Precipitation, y=ResponseTime)) +
