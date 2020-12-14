@@ -147,7 +147,6 @@ vol_count_dat <- main_ems.sf %>%
   unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
 
 # join the volume data file to main dataframe
-anyNA(main_ems.sf$SnowPresent)
 main_ems.sf <-
   left_join(main_ems.sf, vol_count_dat, by="Date_time") %>%
   mutate(MedHHInc = replace_na(Temperature, 0),
@@ -228,8 +227,15 @@ plot(v, col = 0)
 voronoi_polygon <- (st_intersection(st_cast(v), st_union(vb_boundary)))
 
 plot(voronoi_polygon)
-# clip to smaller box
-plot(ems_stations, add = TRUE)
+
+#convert sfc to sf and assign ID
+vb_voronoi = voronoi_polygon %>%
+  st_sf %>%
+  st_cast %>%
+  dplyr::mutate(Voronoi_ID = row_number())
+
+#Assign Voronoi ID for each EMS call
+main_ems.sf <- st_join(main_ems.sf, vb_voronoi, left = TRUE)
 
 # create nn features
 main_ems.sf <- main_ems.sf %>%
