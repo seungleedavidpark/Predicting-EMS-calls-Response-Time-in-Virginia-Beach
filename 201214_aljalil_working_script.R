@@ -978,7 +978,7 @@ summary(reg1)
 
 
 #stepwise
-step(lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+#step(lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
            dplyr::select(ResponseTime,
                          CallPriority,
                          CallVolume,
@@ -1118,8 +1118,8 @@ reg1.1<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                    StrongWind))
 summary(reg1.1)
 
-reg1.2<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
-              dplyr::select(ResponseTime,
+reg1.2<- lm(log_ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
+              dplyr::select(log_ResponseTime,
                             CallPriority,
                             CallVolume,
                             ems_station_nn,
@@ -1169,7 +1169,8 @@ reg1.2<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                             holiday,
                             SnowPresent,
                             HeavyRain,
-                            StrongWind))
+                            StrongWind) %>%
+            dplyr::filter(is.infinite(log_ResponseTime) == FALSE))
 summary(reg1.2)
 
 reg2<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
@@ -1289,7 +1290,7 @@ vb_training <- main_ems.sf[inTrain,]
 vb_test     <- main_ems.sf[-inTrain,]  
 
 #Regression
-reg_final_train <- reg1.1
+reg_final_train <- reg1.2
 
 
 
