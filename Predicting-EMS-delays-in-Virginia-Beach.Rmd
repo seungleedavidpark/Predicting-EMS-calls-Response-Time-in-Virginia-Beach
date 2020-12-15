@@ -1600,7 +1600,7 @@ vb_test.reg1.2_MAPE
 
 
 
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
+```{r, message=FALSE, warning=FALSE}
 regression_table <-data.frame(
   Regression = c("reg1", "reg1.1", "reg2", "reg2.1", "reg1.2"),
   Description = c("Kitchen sink model with all features", "trimmed down model of reg1 using stepwise backward selection function", "model with most signiifcant variables from regression 1.1", "a trimmed down model of reg2 using stepwise backward selection function", "model with log transformed Response Time feature (dependent variable)"), 

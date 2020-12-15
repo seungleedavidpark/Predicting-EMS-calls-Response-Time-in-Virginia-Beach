@@ -983,3 +983,28 @@ vb_test%>%
 
 
 
+vb_training.reg2 <-
+  vb_training %>%
+  mutate(ResponseTime.Predict = predict(reg2, vb_training),
+         ResponseTime.Error = ResponseTime.Predict - ResponseTime,
+         ResponseTime.AbsError = abs(ResponseTime.Predict - ResponseTime),
+         ResponseTime.APE = (abs(ResponseTime.Predict - ResponseTime)) / ResponseTime.Predict)
+
+vb_training.reg2_MAE <-mean(vb_training.reg2$ResponseTime.AbsError, na.rm = T)
+vb_training.reg2_MAE
+vb_training.reg2_MAPE <- mean(vb_training.reg2$ResponseTime.APE, na.rm = T)
+vb_training.reg2_MAPE
+
+vb_test.reg2 <-
+  vb_test %>%
+  mutate(ResponseTime.Predict = predict(reg2, vb_test),
+         ResponseTime.Error = ResponseTime.Predict - ResponseTime,
+         ResponseTime.AbsError = abs(ResponseTime.Predict - ResponseTime),
+         ResponseTime.APE = (abs(ResponseTime.Predict - ResponseTime)) / ResponseTime.Predict)
+
+vb_test.reg2_MAE <-mean(vb_test.reg2$ResponseTime.AbsError, na.rm = T)
+vb_test.reg2_MAE
+vb_test.reg2_MAPE <- mean(vb_test.reg2$ResponseTime.APE, na.rm = T)
+vb_test.reg2_MAPE
+
+
