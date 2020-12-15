@@ -35,7 +35,7 @@ library(measurements)
 library(mapboxapi)
 library(FNN)
 library(kableExtra)
-library(ggrepel)
+library(ggcorrplot)
 ```
 
 ```{r theme and functions, echo=FALSE}
@@ -514,7 +514,7 @@ kbl(census_vars_table , caption ="<b> U.S. Census features<b>") %>%
   column_spec(1, bold = T)
 ```
 
-```{r,load census data, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
+```{r,load census data, message=FALSE, warning=FALSE, results='hide'}
 # Load census (pop_density, med_age, race, poverty, income, education, commute)
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
 selected_vars <- c("B01003_001E", # Total Population
@@ -647,7 +647,7 @@ main_ems.sf <-st_join(main_ems.sf,vb_health, left =TRUE) %>%
 
 Using the `reim` package, we also included the hourly weather data. Hourly **Temperature, Precipitation, Wind Speed, and Humidity** data in Virginia Beach were matched to EMS calls. We have also created three additional binary features **SnowPresent, HeavyRain, and StrongWind** to see if this will make the significance of the relationship with call response time better. **SnowPresent** feature was created by filtering hours when the **temperature was below 42F and Precipitation is above 0**. **HeavyRain** feature was created by filtering hours when the **Precipitation was above 0.5 inches**. **StrongWind** feature was created by filtering hours when the **the average hourly Wind_Speed was above 30mph**.
 
-```{r, load weather data, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
+```{r, load weather data, message=FALSE, warning=FALSE, results='hide'}
 # Load weather data and create features
 vb_weather <- 
   riem_measures(station = "NTU", date_start = "2017-01-01", date_end = "2018-03-01") %>%
@@ -788,7 +788,7 @@ ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
   plotTheme
 ```
 
-### 3.4 Temporal features & Response Time
+### 3.4 Temporal features
 
 We've also explored the average `ResponseTime` across `dotw` which represents **days of the week** and `time_of_day` representing 6 hour time periods of a day (**Overnight, Morning, Afternoon, Evening**). The char below shows that on average, response times during **weekday afternoon** tend to have longer response time while **weekday evening** calls tend to have a shorter response time. On the other hand, **weekend afternoon** calls have shorter response time. The second chart shows the average response time by weekday and weekends. While the difference isn't not drastic, the weekday calls' reponse time tend to be longer. 
 
@@ -941,7 +941,7 @@ grid.arrange(
 
 ```
 
-### 3.6 Response time by weather
+### 3.6 Weather conditions
 
 ```{r, warning=FALSE, message=FALSE}
 
@@ -1066,7 +1066,7 @@ ggcorrplot(
 
 # 4. Model Building
 After exploring and testing correlations of all the variables, we have started our model building process by inclduing all the features we have collected. 
-```{r, include=FALSE, message=FALSE, warning=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
 # TESTING MODEL 
 main_ems.sf$log_ResponseTime <- log(main_ems.sf$ResponseTime)
 main_ems.sf$week <- factor(main_ems.sf$week)
@@ -1600,7 +1600,7 @@ vb_test.reg1.2_MAPE
 
 
 
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
+```{r, message=FALSE, warning=FALSE}
 regression_table <-data.frame(
   Regression = c("reg1", "reg1.1", "reg2", "reg2.1", "reg1.2"),
   Description = c("Kitchen sink model with all features", "trimmed down model of reg1 using stepwise backward selection function", "model with most signiifcant variables from regression 1.1", "a trimmed down model of reg2 using stepwise backward selection function", "model with log transformed Response Time feature (dependent variable)"), 
@@ -1619,6 +1619,8 @@ kbl(regression_table, caption ="<b>Summary of regression models<b>") %>%
   column_spec(1, bold = T)
 ```
 
-# 5. Results
+# 5. Cross Validation
+
+
 
 # 6. Conclusion
