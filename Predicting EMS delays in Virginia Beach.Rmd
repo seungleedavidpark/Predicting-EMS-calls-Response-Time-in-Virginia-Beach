@@ -1,7 +1,7 @@
 ---
 title: "Predicting EMS call response time in Virginia Baech"
-author: "David Seunglee Park"
-date: "12/10/2020"
+author: "Al-Jalil Galt & David Seunglee Park"
+date: "12/15/2020"
 output: 
   html_document:
     code_folding: hide
@@ -213,7 +213,8 @@ main_ems.sf <- main_ems.sf %>%
   mutate(Date = substring(CallDateandTime,1,7)) %>%
   unite(Date_timeofday, c(Date, time_of_day), sep = " ", remove = FALSE) %>%
   unite(Date_time, c(Date, times), sep = " ", remove = FALSE) %>%
-  mutate(holiday = ifelse(Date %in% c("1/2/17 ", "1/16/17", "5/29/17", "7/4/17 ", "9/4/17 ", "11/23/1", "12/25/1", "1/1/18 ", "1/15/18"), "Holiday", "Non-Holiday"))
+  mutate(holiday = ifelse(Date %in% c("1/2/17 ", "1/16/17", "5/29/17", "7/4/17 ", "9/4/17 ", "11/23/1", "12/25/1", "1/1/18 ", "1/15/18"), "Holiday", "Non-Holiday")) %>%
+  drop_na()
 
 ```
 
@@ -222,7 +223,7 @@ main_ems.sf <- main_ems.sf %>%
 vol_count_dat <- main_ems.sf %>%
   st_drop_geometry() %>%
   group_by(Date, times) %>%
-  summarise(CallVolume = n()) %>%
+  count(CallVolume = n()) %>%
   unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
 
 # join the volume data file to main dataframe
@@ -414,7 +415,7 @@ kbl(nn_table , caption ="<b>Eengineered spatial features<b>") %>%
   column_spec(1, bold = T)
 ```
 
-```{r, loading map files, message=FALSE, warning=FALSE, results='hide'}
+```{r, loading map files, message=FALSE, warning=FALSE}
 # load VB boundary census tracts
 vb_boundary <-
   st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
@@ -1830,3 +1831,6 @@ vb_test%>%
 
 
 # 6. Conclusion
+
+Ability to predict response time of a EMS call can be a helpful tool for many 
+
