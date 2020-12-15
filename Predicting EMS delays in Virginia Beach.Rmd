@@ -36,6 +36,7 @@ library(mapboxapi)
 library(FNN)
 library(kableExtra)
 library(ggcorrplot)
+library(papeR)
 ```
 
 ```{r theme and functions, echo=FALSE}
@@ -154,7 +155,7 @@ kbl(datasource_table, caption ="<b>Datasets used<b>") %>%
 Our main dataset was provided by the class, which has the time and other characteristics of the EMS calls in Virginia Beach during January 2017 through February 2018. In the following section, we will discuss further about the feature engineering process using the data from this dataset. Additionally, we have used **tract level U.S. Census demographic data** from the U.S. Census Bureau, **weather data at the time of the calls** using the `reim` package, and **tract level chronic disease and health outcome data** from the Center for Disease Control and Prevention. We have selected these datasets to better understand the what factors may contribute to the **response time** of an EMS call. 
 
 ### 2.1. Load main EMS data
-```{r, load the main dataset, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
+```{r, load the main dataset, message=FALSE, warning=FALSE, results='hide'}
 # load main dataset and make it an SF object
 main_ems <- read.csv("Main_VaBeach_EMS_2017_18.csv")
 main_ems.sf <- main_ems %>%
@@ -1065,9 +1066,12 @@ ggcorrplot(
 ```
 
 # 4. Model Building
-After exploring and testing correlations of all the variables, we have started our model building process by inclduing all the features we have collected. 
-```{r, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+After exploring and testing correlations of all the variables, we have started our model building process by including all the features we have collected. The table below summarizes the results of 5 models we created in trying to find the best prediction model. The table provides the **description of the models**, **Adjusted R^2**, **mean absolute error (MAE)** and **mean absolute percent error (MAPE)** values for both training and testing datasets we have create in testing the models.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # TESTING MODEL 
+
+#set up variables for model building
 main_ems.sf$log_ResponseTime <- log(main_ems.sf$ResponseTime)
 main_ems.sf$week <- factor(main_ems.sf$week)
 main_ems.sf$dotw <- factor(main_ems.sf$dotw, levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
@@ -1075,7 +1079,7 @@ main_ems.sf$dotw <- relevel(main_ems.sf$dotw, ref = "Mon")
 main_ems.sf$holiday <- factor(main_ems.sf$holiday, levels = c("Holiday", "Non-Holiday"))
 main_ems.sf$holiday <- relevel(main_ems.sf$holiday, ref = "Holiday")
 
-
+#set up training and testing dataframes
 # set random seed
 set.seed(31337)
 
@@ -1088,7 +1092,6 @@ vb_training <- main_ems.sf[inTrain,]
 vb_test     <- main_ems.sf[-inTrain,]  
 
 #First, we will create a "kitchen-sink" model which has all variables that we've analyzed in this projects.
-
 reg1 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>% 
              dplyr::select( ResponseTime,
                             CallPriority,
@@ -1159,6 +1162,7 @@ reg1 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                             StrongWind))
 summary(reg1)
 
+#get the MAE and MAPE for training and testing dataframes using reg1
 vb_training.reg1 <-
   vb_training %>%
   mutate(ResponseTime.Predict = predict(reg1, vb_training),
@@ -1330,7 +1334,7 @@ reg1.1<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
 
 summary(reg1.1)
 
-
+#get MAE and MAPE of reg1.1
 vb_training.reg1.1 <-
   vb_training %>%
   mutate(ResponseTime.Predict = predict(reg1.1, vb_training),
@@ -1394,6 +1398,7 @@ reg2<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
 
 summary(reg2)
 
+#get MAE and MAPE of reg2
 vb_training.reg2 <-
   vb_training %>%
   mutate(ResponseTime.Predict = predict(reg2, vb_training),
@@ -1487,6 +1492,7 @@ reg2.1<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
 
 summary(reg2.1)
 
+#get MAE and MAPE of reg2.1
 vb_training.reg2.1 <-
   vb_training %>%
   mutate(ResponseTime.Predict = predict(reg2.1, vb_training),
@@ -1598,14 +1604,18 @@ vb_test.reg1.2_MAPE
 #results from log transformed variables have been the best yet - with mean absolute error from out test set at 2.58.
 ```
 
+First model `reg1` is a "kitchen-sink" model which has all variables that we've analyzed in this projects. The second model `reg1.1` is a trimmed down model of `reg1` using the **stepwise backward selection method**. This process drops each individual variable at a time to find a model with the least **AIC (Akaike information criterion)** which estimates the quality of each model relative to other models. the output of this process, `reg1.1` was output of the stepwise function with the smallest AIC value, indicating this output is the statistically best model from the variables from `reg1`. However, the improvement of th model seems minimal when considering the *Adjusted R^2**, **mean absolute error (MAE)** and **mean absolute percent error (MAPE)** values. 
 
+Next, we selected the variables that had the most statistical significance from `reg1` to create `reg2`. This model represents a more "lean" model in comparison to the "kitchen sink" model. Unfortunately, `reg2` did now show improvement from the previous two models - it actually had higher **MAE** and **MAPE** values on both testing and training sets. Then, we conducted the  **stepwise backwards selection** method to `reg2` to get a leaner model by removing variables which do not significantly improve model outcomes. The result is `reg2.1`. However, the result was disappoiting as the `reg2.1` was not statistically better than any of the previous models. 
+
+Using our best performing model yet, `reg 1.1`, we will create another model `reg1.2` with **log transform** response time as the dependent variable. The results from `reg1.2` was the statistically best among the 5 regression models - with the highest **adjusted R^2** and mean absolute error from out test set at 2.58. Comparing results from the 5 models, we decided that `reg1.2` is our final model. 
 
 ```{r, message=FALSE, warning=FALSE}
 regression_table <-data.frame(
   Regression = c("reg1", "reg1.1", "reg2", "reg2.1", "reg1.2"),
-  Description = c("Kitchen sink model with all features", "trimmed down model of reg1 using stepwise backward selection function", "model with most signiifcant variables from regression 1.1", "a trimmed down model of reg2 using stepwise backward selection function", "model with log transformed Response Time feature (dependent variable)"), 
+  Description = c("Kitchen sink model with all features", "trimmed down model of reg1 using stepwise backward selection function", "model with most signiifcant variables from regression 1.1", "trimmed down model of reg2 using stepwise backward selection function", "FINAL MODEL: model with log transformed Response Time feature (dependent variable)"), 
   "Adjusted R2" = c("0.2211","0.2213","0.2159","0.2159","0.2651"),
-  "MAE on Training set" = c("2.63","2.63","2.65","2.65","2.59"),
+  "MAE on Training set" = c("2.6391","2.6382","2.6541","2.6543","2.5985"),
   "MAPE on Training set" = c("28.98%","29.03%","29.77%","29.77%","30.86%"),
   "MAE on Testing set" = c("2.5643","2.5646","2.5804","2.5807","2.5202"),
   "MAPE on Testing set" = c("28.277%","28.296%","28.325%","28.322%","29.958%")
@@ -1615,12 +1625,208 @@ kbl(regression_table, caption ="<b>Summary of regression models<b>") %>%
   kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
   kable_styling (bootstrap_options = "striped", "condensed", font_size = 9) %>%
   row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 10) %>%
-  row_spec(5, bold = T) %>%
+  row_spec(5, bold = T, background = "#bbdefb") %>%
   column_spec(1, bold = T)
 ```
 
-# 5. Cross Validation
+the Summary table of our final model `reg1.2` is below. Most of the variables showed statistical significance, with the exception of **Precipitation** and some categorical variables in **days of the week**, **week**, and **3 hour time bins**. 
 
+```{r, final_model, echo=FALSE, results = 'asis'}
+pretty_lm <- prettify(summary(reg1.2))
+kbl(pretty_lm, caption ="<b>Summary of final model (reg1.2) <b>") %>%
+  kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
+  kable_styling (bootstrap_options = "striped", "condensed", font_size = 9) %>%
+  row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 10) %>%
+  column_spec(1, bold = T)  %>%
+  scroll_box(width = "100%", height = "400px")
+```
+
+
+```{r}
+kbl(cat("Train MAE: ", (vb_training.reg1.2_MAE), " \n","Test MAE: ", (vb_test.reg1.2_MAE)) %>%
+      column_spec(1, bold = T))
+
+#Plotting accuracy metrics
+preds.train <- data.frame(pred   = vb_training.reg1.2$ResponseTime.Predict,
+                          actual = vb_training.reg1.2$ResponseTime,
+                          source = "training data")
+preds.test  <- data.frame(pred   = vb_test.reg1.2$ResponseTime.Predict,
+                          actual = vb_test.reg1.2$ResponseTime,
+                          source = "testing data")
+preds <- rbind(preds.train, preds.test)
+
+ggplot(preds, aes(x = actual, y = pred, color = source)) +
+  geom_point() +
+  scale_fill_manual(values = palette5) +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  facet_wrap(~source, ncol = 2) +
+  labs(title = "Comparing predictions to actual ResponeTime for the test set and the training set",
+       caption="Predicted ResponeTime as a Function of Observed ResponseTime for the Test Set and the Training Set",
+       x = "Actual ResponseTime",
+       y = "Predicted Response") +
+  plotTheme +
+  theme(
+    legend.position = "none"
+  )
+
+ggplot(preds, aes(x = actual, y = pred)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  labs(title = "Comparing predictions to actual response times for all calls",
+       caption="Predicted response time as a Function of Observed response time",
+       x = "Actual ResponseTime",
+       y = "Predicted ResponseTime") +
+  plotTheme
+```
+# 5. Cross Validation
+```{r, cross validation}
+#Generalizability - cross validation
+fitControl <- trainControl(method = "cv", number = 100, savePredictions = TRUE)
+set.seed(825)
+
+reg.cv <- 
+  train(log_ResponseTime ~ ., data = st_drop_geometry(vb_training) %>% 
+             dplyr::select(log_ResponseTime,
+                           CallPriority,
+                           CallVolume,
+                           ems_station_nn,
+                           fire_stations_nn,
+                           b_advanced_life_support,
+                           b_chief_dispatch,
+                           b_special_event,
+                           b_air_dispatch,
+                           b_water_dispatch,
+                           b_mass_casualty_dispatch,
+                           b_fire_dispatch,
+                           Temperature,
+                           Precipitation,
+                           ACCESS2_CrudePrev,
+                           ARTHRITIS_CrudePrev,
+                           BINGE_CrudePrev,
+                           BPHIGH_CrudePrev,
+                           BPMED_CrudePrev,
+                           CANCER_CrudePrev,
+                           CHD_CrudePrev,
+                           CHECKUP_CrudePrev,
+                           CHOLSCREEN_CrudePrev,
+                           COLON_SCREEN_CrudePrev,
+                           COPD_CrudePrev,
+                           COREM_CrudePrev,
+                           COREW_CrudePrev,
+                           CSMOKING_CrudePrev,
+                           DENTAL_CrudePrev,
+                           DIABETES_CrudePrev,
+                           HIGHCHOL_CrudePrev,
+                           LPA_CrudePrev,
+                           OBESITY_CrudePrev,
+                           PAPTEST_CrudePrev,
+                           PHLTH_CrudePrev,
+                           STROKE_CrudePrev,
+                           TotalPop,
+                           MedHHInc,
+                           TotalHH,
+                           pctWhite,
+                           pctBachelors,
+                           pctPoverty,
+                           pctCarCommute,
+                           PopDens,
+                           week,
+                           dotw,
+                           times.x,
+                           holiday,
+                           SnowPresent,
+                           HeavyRain,
+                           StrongWind) %>%
+          dplyr::filter(is.infinite(log_ResponseTime) == FALSE), 
+        method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+reg.cv$resample
+
+reg.cv$resample %>% 
+  pivot_longer(-Resample) %>% 
+  mutate(name = as.factor(name)) %>% 
+  ggplot(., aes(x = name, y = value, color = name)) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(~name, ncol = 3, scales = "free") +
+  theme_bw() +
+  theme(
+    legend.position = "none"
+  )
+
+reg.cv.dataframe<-
+  reg.cv$resample %>% 
+  dplyr::select(MAE) %>%
+  data.frame()
+
+
+ggplot(reg.cv.dataframe, aes(x=MAE)) +
+  geom_histogram(fill = "darkblue") +
+  labs(title="Distribution of Mean Average Error from 100 Fold Test",
+       x="Mean Average Error", 
+       y="Frequency")+
+  plotTheme
+
+
+
+# extract predictions from CV object
+cv_preds <- reg.cv$pred
+nrow(main_ems.sf)
+nrow(cv_preds)
+
+#Create dataset with "out of fold" predictions and original data
+map_preds <- main_ems.sf %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(ResponseTime.AbsError = abs(pred - ResponseTime)) %>% 
+  cbind(st_coordinates((.)))
+
+st_crs(map_preds) <- st_crs(vb_tracts)
+
+# plot errors on a map
+ggplot() +
+  geom_sf(data = vb_tracts, fill = "grey40") +
+  geom_sf(data = map_preds, aes(colour = q5(ResponseTime.AbsError)),
+          show.legend = "point", size = 1) +
+  scale_colour_manual(values = palette5,
+                      labels=qBr(map_preds,"ResponseTime.AbsError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Absolute Response time errors on the OOF set",
+       subtitle = "OOF = 'Out Of Fold'") +
+  mapTheme
+
+#errors
+vb_test <-
+  vb_test %>%
+  mutate(Regression = "Baseline Regression",
+         ResponseTime.Predict = ifelse((predict(reg_final_train, vb_test)) < 0, mean(vb_training$ResponseTime), predict(reg_final_train, vb_test)),
+         ResponseTime.Error = ResponseTime.Predict - ResponseTime,
+         ResponseTime.AbsError = abs(ResponseTime.Predict - ResponseTime),
+         ResponseTime.APE = (abs(ResponseTime.Predict - ResponseTime)) / abs(ResponseTime.Predict))%>%
+  mutate(ResponseTime.AbsError = replace_na(ResponseTime.AbsError, 0))%>%
+  mutate(ResponseTime.Error=replace_na(ResponseTime.Error, 0))
+
+
+
+summary(vb_test$ResponseTime.AbsError)
+summary(vb_test$ResponseTime.APE)
+
+#table of MAE and MAPE for single test set
+vb_test%>%
+  st_drop_geometry()%>%
+  summarize(Mean_Absolute_Error = mean(ResponseTime.AbsError, na.rm = T),
+            Mean_Absolute_Percentage_Error=mean(ResponseTime.APE, na.rm=T)) %>%
+  dplyr::select(Mean_Absolute_Error, Mean_Absolute_Percentage_Error)%>%
+  kable(caption = "Figure x. Mean Absolute Error and Mean Absolute Percentage Error for the Test Set") %>%
+  kable_styling("striped", full_width = F)
+```
 
 
 # 6. Conclusion
