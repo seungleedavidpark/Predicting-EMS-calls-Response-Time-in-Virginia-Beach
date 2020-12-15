@@ -987,9 +987,89 @@ grid.arrange(
 )
 ```
 
+### 3.7 Correlations
+
+As part of the exploratory analysis, we examined correlation to assist in identifying features that may be useful for predicting our dependent variable `ResponseTime`. A correlation matrix helps us visualize correlation across numeric variables. In the chart, the darker colors imply stronger correlation. These plot helps to determine features that are correlated to `ResponseTime` and variables that are correlated with each other. We find that many of the **health outcome variables** and **census demographic variables** are highly correlated with each other.  
+
+```{r}
+# CORRELATIONS
+selected_vars <- 
+  select(st_drop_geometry(main_ems.sf),
+         ResponseTime,
+         CallPriority,
+         CallVolume,
+         ems_station_nn,
+         hospitals_nn,
+         fire_stations_nn,
+         b_advanced_life_support,
+         b_chief_dispatch,
+         b_special_event,
+         b_air_dispatch,
+         b_hold_dispatch,
+         b_water_dispatch, 
+         b_mass_casualty_dispatch,
+         b_fire_dispatch,
+         Temperature,
+         Precipitation,
+         Wind_Speed,
+         Humidity,
+         ACCESS2_CrudePrev,
+         ARTHRITIS_CrudePrev,
+         BINGE_CrudePrev,
+         BPHIGH_CrudePrev,
+         BPMED_CrudePrev,
+         CANCER_CrudePrev,
+         CASTHMA_CrudePrev,
+         CHD_CrudePrev,
+         CHECKUP_CrudePrev,
+         CHOLSCREEN_CrudePrev,
+         COLON_SCREEN_CrudePrev,
+         COPD_CrudePrev,
+         COREM_CrudePrev,
+         COREW_CrudePrev,
+         CSMOKING_CrudePrev,
+         DENTAL_CrudePrev,
+         DIABETES_CrudePrev,
+         HIGHCHOL_CrudePrev,
+         KIDNEY_CrudePrev,
+         LPA_CrudePrev,
+         MAMMOUSE_CrudePrev,
+         MHLTH_CrudePrev,
+         OBESITY_CrudePrev,
+         PAPTEST_CrudePrev,
+         PHLTH_CrudePrev,
+         SLEEP_CrudePrev,
+         STROKE_CrudePrev,
+         TEETHLOST_CrudePrev,
+         TotalPop,
+         MedHHInc,
+         TotalHH,
+         pctWhite,
+         pctBlack,
+         pctHis,
+         pctBachelors,
+         pctPoverty,
+         pctCarCommute,
+         pctPubCommute,
+         PopDens
+         ) %>% 
+  na.omit()
+
+ggcorrplot(
+  round(cor(selected_vars), 1), 
+  p.mat = cor_pmat(selected_vars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation over selected features",
+       caption="Correlation Plot") + gridTheme
+```
 
 
 # 4. Model Building
+After exploring and testing correlations of all the variables, we have started our model building process
+
+
 
 # 5. Results
 
