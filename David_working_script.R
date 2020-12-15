@@ -148,14 +148,7 @@ vol_count_dat <- main_ems.sf %>%
 
 # join the volume data file to main dataframe
 main_ems.sf <-
-  left_join(main_ems.sf, vol_count_dat, by="Date_time") %>%
-  mutate(MedHHInc = replace_na(Temperature, 0),
-         MedRent = replace_na(MedRent,0),
-         pctBachelors= replace_na(pctBachelors,0),
-         pctHis= replace_na(pctHis,0),
-         pctOwnerHH= replace_na(pctOwnerHH,0),
-         pctCarCommute= replace_na(pctCarCommute,0),
-         pctHH200kOrMore= replace_na(pctHH200kOrMore,0))
+  left_join(main_ems.sf, vol_count_dat, by="Date_time")
 
 # plot call volume
 ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
