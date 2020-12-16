@@ -14,6 +14,18 @@ output:
 
 # 1. Introduction
 
+The purpose of this project is to amplify the presence of shared information in the event of a medical emergency by providing an estimated time of arrival for emergency medical services (EMS).
+
+As today’s medical heroes work diligently to preserve lives when people are in danger, they work in imperfect urban-rural landscape in the context of larger socio-economic and environmental conditions. The emergency medical systems faces call surges, capacity overloads, and inclement weather while trying to meet the complex, diverse, and unpredictable needs of people in a life-safety crisis in the most efficient manner possible. During the COVID-19 Pandemic, first responders are reaching our for help in addressing these challenges.^[Minnesota first responders call for help guarding against COVID-19 https://www.wctrib.com/newsmd/coronavirus/6784830-Minnesota-first-responders-call-for-help-guarding-against-COVID-19]
+
+This project develops an algorithm to predict EMS response time – the time difference between a user to calling 911 and for assistance to arrive on-scene. It uses publicly available data from the city of Virginia Beach’s Open Data Portal, EMS Calls for Service.^[https://data.vbgov.com/dataset/ems-calls-for-service]
+
+Knowing the potential response time for an ambulance is important because it allows those in need to assess their most efficient ways of receiving care in the options that best suits the user. For example, if a user has an ankle sprain, and there’s a 11 minute estimated time of arrival for an ambulance to arrive at their location, but only 15 minutes if a user received a ride from a partner, they are now in a better position to assess the cost/benefit of calling an ambulance for that 4-minute difference.
+
+The project proposes to use this information in a new mobile-phone application called MyEMS. The app allows users to select their medical emergency, visualize all the different ways they can reach care and then request an ambulance or receive driving directions to the nearest hospital. They will also be able to immediately get connected with a medical staff via telemedicine while they wait for care.
+
+
+
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -119,7 +131,7 @@ nn_function <- function(measureFrom,measureTo,k) {
     gather(points, point_distance, V1:ncol(.)) %>%
     arrange(as.numeric(thisPoint)) %>%
     group_by(thisPoint) %>%
-    summarize(pointDistance = mean(point_distance)) %>%
+    dplyr::summarise(pointDistance = mean(point_distance)) %>%
     arrange(as.numeric(thisPoint)) %>% 
     dplyr::select(-thisPoint) %>%
     pull()
@@ -222,9 +234,8 @@ main_ems.sf <- main_ems.sf %>%
 # create call volume column
 vol_count_dat <- main_ems.sf %>%
   st_drop_geometry() %>%
-  group_by(Date, times) %>%
-  count(CallVolume = n()) %>%
-  unite(Date_time, c(Date, times), sep = " ", remove = FALSE)
+  group_by(Date_time) %>%
+  dplyr::summarise(CallVolume = n())
 
 # join the volume data file to main dataframe
 main_ems.sf <-
@@ -659,7 +670,7 @@ vb_weather <-
   mutate(week = week(interval60),
          dotw = wday(interval60, label=TRUE)) %>%
   group_by(interval60) %>%
-  summarize(Temperature = max(tmpf),
+  dplyr::summarise(Temperature = max(tmpf),
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt),
             Humidity = max(relh)) %>%
@@ -792,13 +803,13 @@ ggplot(main_ems.sf, aes(x=CallVolume, y=ResponseTime)) +
 
 ### 3.4 Temporal features
 
-We've also explored the average `ResponseTime` across `dotw` which represents **days of the week** and `time_of_day` representing 6 hour time periods of a day (**Overnight, Morning, Afternoon, Evening**). The char below shows that on average, response times during **weekday afternoon** tend to have longer response time while **weekday evening** calls tend to have a shorter response time. On the other hand, **weekend afternoon** calls have shorter response time. The second chart shows the average response time by weekday and weekends. While the difference isn't not drastic, the weekday calls' reponse time tend to be longer. 
+We've also explored the average `ResponseTime` across `dotw` which represents **days of the week** and `time_of_day` representing 6 hour time periods of a day (**Overnight, Morning, Afternoon, Evening**). The char below shows that on average, response times during **weekday afternoon** tend to have longer response time while **weekday evening** calls tend to have a shorter response time. On the other hand, **weekend afternoon** calls have shorter response time. The second chart shows the average response time by weekday and weekends. While the difference isn't not drastic, the weekday calls' response time tend to be longer. 
 
 ```{r, warning=FALSE, message=FALSE}
 # map Response Time of EMS calls by days of the week and time of the day
 ggplot(data = main_ems.sf %>%
          group_by(dotw, time_of_day) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=meanResponeTime, y=dotw, fill = time_of_day), stat="identity", position=position_dodge())+
   scale_fill_manual(values = palette5) +
   labs(title="Response Time of EMS calls by days of the week and time of the day",
@@ -809,7 +820,7 @@ ggplot(data = main_ems.sf %>%
 ggplot(data = main_ems.sf %>%
            group_by(weekend) %>%
            drop_na(weekend) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=weekend, y=meanResponeTime, fill=weekend), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette2) + 
     labs(title="Response Time of EMS calls by weekday or weekend",
@@ -828,14 +839,14 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
            group_by(season) %>%
            drop_na(season) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=season, y=meanResponeTime, fill=season), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette5) + 
     gridTheme, 
     ggplot(data = main_ems.sf %>%
            group_by(holiday) %>%
            drop_na(holiday) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=holiday, y=meanResponeTime, fill=holiday), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette2) + 
     gridTheme,
@@ -856,7 +867,7 @@ Surprisingly, the **Priority 1** calls did not have the shortest response time. 
 # map meanResponseTime by CallPriority
 ggplot(data = main_ems.sf %>%
          group_by(CallPriority) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=CallPriority, y=meanResponeTime, fill=CallPriority), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   labs(title= "Avg Response Time Difference of Call Prioriy Types") +
   plotTheme
@@ -869,7 +880,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(advanced_life_support) %>%
          drop_na(advanced_life_support) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=advanced_life_support, y=meanResponeTime, fill=advanced_life_support), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of EMS Calls requiring Adv. Life Support") +
@@ -878,7 +889,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(chief_dispatch) %>%
          drop_na(chief_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=chief_dispatch, y=meanResponeTime, fill=chief_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of EMS Calls needing a Chief") +
@@ -887,7 +898,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(special_event) %>%
          drop_na(special_event) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=special_event, y=meanResponeTime, fill=special_event), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of EMS Calls at Special Events") +
@@ -896,7 +907,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(air_dispatch) %>%
          drop_na(air_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=air_dispatch, y=meanResponeTime, fill=air_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of EMS Calls Using Helicopter Amb.") +
@@ -907,7 +918,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(hold_dispatch) %>%
          drop_na(hold_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=hold_dispatch, y=meanResponeTime, fill=hold_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) +
   labs(title= "Avg Response Time Difference of EMS Calls on HOLD by Dispatcher") +
@@ -916,7 +927,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(water_dispatch) %>%
          drop_na(water_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=water_dispatch, y=meanResponeTime, fill=water_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of Marine EMS Calls") +
@@ -925,7 +936,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(mass_casualty_dispatch) %>%
          drop_na(mass_casualty_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=mass_casualty_dispatch, y=meanResponeTime, fill=mass_casualty_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of Mass Casualty EMS Calls") +
@@ -934,7 +945,7 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
          group_by(fire_dispatch) %>%
          drop_na(fire_dispatch) %>%
-         summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+         dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
   geom_bar(aes(x=fire_dispatch, y=meanResponeTime, fill=fire_dispatch), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
   scale_fill_manual(values = palette2) + 
   labs(title= "Avg Response Time Difference of Fire-related EMS Calls") +
@@ -967,21 +978,21 @@ grid.arrange(
   ggplot(data = main_ems.sf %>%
            group_by(SnowPresent) %>%
            drop_na(SnowPresent) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=SnowPresent, y=meanResponeTime, fill=SnowPresent), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette2) + 
     gridTheme,
   ggplot(data = main_ems.sf %>%
            group_by(HeavyRain) %>%
            drop_na(HeavyRain) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=HeavyRain, y=meanResponeTime, fill=HeavyRain), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette2) + 
     gridTheme,
   ggplot(data = main_ems.sf %>%
            group_by(StrongWind) %>%
            drop_na(StrongWind) %>%
-           summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
+           dplyr::summarise(meanResponeTime = mean(ResponseTime, na.rm=TRUE))) +
     geom_bar(aes(x=StrongWind, y=meanResponeTime, fill=StrongWind), stat="identity", position=position_dodge(), show.legend = FALSE, width=0.5) +
     scale_fill_manual(values = palette2) + 
     gridTheme, 
@@ -1154,7 +1165,7 @@ reg1 <- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                             week, 
                             dotw, 
                             time_of_day, 
-                            times.x, 
+                            times, 
                             holiday, 
                             season, 
                             weekend, 
@@ -1255,7 +1266,7 @@ vb_test.reg1_MAPE
     #                     week, 
     #                     dotw, 
     #                     time_of_day, 
-    #                     times.x, 
+    #                     times, 
     #                     holiday, 
     #                     season, 
     #                     weekend, 
@@ -1326,7 +1337,7 @@ reg1.1<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                    PopDens,
                    week,
                    dotw,
-                   times.x,
+                   times,
                    holiday,
                    SnowPresent,
                    HeavyRain,
@@ -1391,7 +1402,7 @@ reg2<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                             PopDens,
                             week,
                             dotw,
-                            times.x,
+                            times,
                             holiday,
                             SnowPresent,
                             StrongWind))
@@ -1453,7 +1464,7 @@ vb_test.reg2_MAPE
   #                      PopDens,
   #                      week,
   #                      dotw,
-  #                      times.x,
+  #                      times,
   #                      holiday,
   #                      SnowPresent,
   #                     StrongWind)), 
@@ -1485,7 +1496,7 @@ reg2.1<- lm(ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                           PopDens,
                           week,
                           dotw,
-                          times.x,
+                          times,
                           holiday,
                           SnowPresent,
                           StrongWind))
@@ -1568,7 +1579,7 @@ reg1.2<- lm(log_ResponseTime ~ ., data = st_drop_geometry(main_ems.sf) %>%
                             PopDens,
                             week,
                             dotw,
-                            times.x,
+                            times,
                             holiday,
                             SnowPresent,
                             HeavyRain,
@@ -1739,7 +1750,7 @@ reg.cv <-
                            PopDens,
                            week,
                            dotw,
-                           times.x,
+                           times,
                            holiday,
                            SnowPresent,
                            HeavyRain,
