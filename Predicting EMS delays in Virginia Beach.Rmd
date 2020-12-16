@@ -1,6 +1,6 @@
 ---
 title: "Predicting EMS call response time in Virginia Baech"
-author: "Al-Jalil Galt & David Seunglee Park"
+author: "Al-Jalil Gault & David Seunglee Park"
 date: "12/15/2020"
 output: 
   html_document:
@@ -22,9 +22,11 @@ This project develops an algorithm to predict EMS response time – the time dif
 
 Knowing the potential response time for an ambulance is important because it allows those in need to assess their most efficient ways of receiving care in the options that best suits the user. For example, if a user has an ankle sprain, and there’s a 11 minute estimated time of arrival for an ambulance to arrive at their location, but only 15 minutes if a user received a ride from a partner, they are now in a better position to assess the cost/benefit of calling an ambulance for that 4-minute difference.
 
-The project proposes to use this information in a new mobile-phone application called MyEMS. The app allows users to select their medical emergency, visualize all the different ways they can reach care and then request an ambulance or receive driving directions to the nearest hospital. They will also be able to immediately get connected with a medical staff via telemedicine while they wait for care.
+The project proposes to use this information in a new mobile-phone application called **MyEMS**. The app allows users to select their medical emergency, visualize all the different ways they can reach care and then request an ambulance or receive driving directions to the nearest hospital. They will also be able to immediately get connected with a medical staff via telemedicine while they wait for care.
 
+![](wireframe1.png)
 
+![](wireframe2.png)
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -49,6 +51,7 @@ library(FNN)
 library(kableExtra)
 library(ggcorrplot)
 library(papeR)
+library(caret)
 ```
 
 ```{r theme and functions, echo=FALSE}
@@ -140,6 +143,7 @@ nn_function <- function(measureFrom,measureTo,k) {
 }
 
 # load color palettes
+palette6 <- c("#F4EDCA", "#FFDB6D", "#C4961A","#D16103", "#800000")
 palette5 <- c("#03254c","#1167b1","#64b5f6","#2196f3","#bbdefb")
 palette4 <- c("#3a7d7c","#ffa137","#ff4400","#065125")
 palette2 <- c("#03254c","#187bcd")
@@ -500,14 +504,16 @@ vb_voronoi <-st_join(voronoi_polygon,ems_stations, left =TRUE) %>%
   mutate(voronoi_id = OBJECTID) %>%
   dplyr::select(geometry, voronoi_id)
 
-#Assign Voronoi ID for each EMS call
-main_ems.sf <- st_join(main_ems.sf, vb_voronoi, left = TRUE)
 
 ggplot() + 
   geom_sf(data = vb_voronoi, fill = "#1167b1") +
   geom_sf(data = ems_stations, color="white") +
   labs(title = "Virginia Beach EMS station zones \nusing voronoi function") +
   mapTheme
+
+
+#Assign Voronoi ID for each EMS call
+main_ems.sf <- st_join(main_ems.sf, vb_voronoi, left = TRUE)
 ```
 
 ### 2.3 Load census and health data
@@ -1080,7 +1086,7 @@ ggcorrplot(
 # 4. Model Building
 After exploring and testing correlations of all the variables, we have started our model building process by including all the features we have collected. The table below summarizes the results of 5 models we created in trying to find the best prediction model. The table provides the **description of the models**, **Adjusted R^2**, **mean absolute error (MAE)** and **mean absolute percent error (MAPE)** values for both training and testing datasets we have create in testing the models.  
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, results= 'hide'}
 # TESTING MODEL 
 
 #set up variables for model building
@@ -1616,48 +1622,49 @@ vb_test.reg1.2_MAPE
 #results from log transformed variables have been the best yet - with mean absolute error from out test set at 2.58.
 ```
 
-First model `reg1` is a "kitchen-sink" model which has all variables that we've analyzed in this projects. The second model `reg1.1` is a trimmed down model of `reg1` using the **stepwise backward selection method**. This process drops each individual variable at a time to find a model with the least **AIC (Akaike information criterion)** which estimates the quality of each model relative to other models. the output of this process, `reg1.1` was output of the stepwise function with the smallest AIC value, indicating this output is the statistically best model from the variables from `reg1`. However, the improvement of th model seems minimal when considering the *Adjusted R^2**, **mean absolute error (MAE)** and **mean absolute percent error (MAPE)** values. 
-
-Next, we selected the variables that had the most statistical significance from `reg1` to create `reg2`. This model represents a more "lean" model in comparison to the "kitchen sink" model. Unfortunately, `reg2` did now show improvement from the previous two models - it actually had higher **MAE** and **MAPE** values on both testing and training sets. Then, we conducted the  **stepwise backwards selection** method to `reg2` to get a leaner model by removing variables which do not significantly improve model outcomes. The result is `reg2.1`. However, the result was disappoiting as the `reg2.1` was not statistically better than any of the previous models. 
-
-Using our best performing model yet, `reg 1.1`, we will create another model `reg1.2` with **log transform** response time as the dependent variable. The results from `reg1.2` was the statistically best among the 5 regression models - with the highest **adjusted R^2** and mean absolute error from out test set at 2.58. Comparing results from the 5 models, we decided that `reg1.2` is our final model. 
-
+### 4.1 Summary of models
 ```{r, message=FALSE, warning=FALSE}
 regression_table <-data.frame(
   Regression = c("reg1", "reg1.1", "reg2", "reg2.1", "reg1.2"),
   Description = c("Kitchen sink model with all features", "trimmed down model of reg1 using stepwise backward selection function", "model with most signiifcant variables from regression 1.1", "trimmed down model of reg2 using stepwise backward selection function", "FINAL MODEL: model with log transformed Response Time feature (dependent variable)"), 
   "Adjusted R2" = c("0.2211","0.2213","0.2159","0.2159","0.2651"),
-  "MAE on Training set" = c("2.6391","2.6382","2.6541","2.6543","2.5985"),
-  "MAPE on Training set" = c("28.98%","29.03%","29.77%","29.77%","30.86%"),
-  "MAE on Testing set" = c("2.5643","2.5646","2.5804","2.5807","2.5202"),
-  "MAPE on Testing set" = c("28.277%","28.296%","28.325%","28.322%","29.958%")
+  "MAE on Training set" = c("2.6389","2.6379","2.6540","2.6542","2.5987"),
+  "MAPE on Training set" = c("28.712%","28.998%","29.772%","29.768%","30.865%"),
+  "MAE on Testing set" = c("2.5646","2.5649","2.5806","2.5809","2.5205"),
+  "MAPE on Testing set" = c("28.417%","28.448%","28.459%","28.459%","29.964%")
 )
 
 kbl(regression_table, caption ="<b>Summary of regression models<b>") %>%
   kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
-  kable_styling (bootstrap_options = "striped", "condensed", font_size = 9) %>%
+  kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
   row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 10) %>%
   row_spec(5, bold = T, background = "#bbdefb") %>%
   column_spec(1, bold = T)
 ```
 
-the Summary table of our final model `reg1.2` is below. Most of the variables showed statistical significance, with the exception of **Precipitation** and some categorical variables in **days of the week**, **week**, and **3 hour time bins**. 
+First model `reg1` is a "kitchen-sink" model which has all variables that we've analyzed in this projects. The second model `reg1.1` is a trimmed down model of `reg1` using the **stepwise backward selection method**. This process drops each individual variable at a time to find a model with the least **AIC (Akaike information criterion)** which estimates the quality of each model relative to other models. the output of this process, `reg1.1` was output of the stepwise function with the smallest AIC value, indicating this output is the statistically best model from the variables from `reg1`. However, the improvement of th model seems minimal when considering the *Adjusted R^2**, **mean absolute error (MAE)** and **mean absolute percent error (MAPE)** values. 
 
-```{r, final_model, echo=FALSE, results = 'asis'}
+Next, we selected the variables that had the most statistical significance from `reg1` to create `reg2`. This model represents a more "lean" model in comparison to the "kitchen sink" model. Unfortunately, `reg2` did now show improvement from the previous two models - it actually had slightly higher **MAE** and **MAPE** values on both testing and training sets. Then, we conducted the  **stepwise backwards selection** method to `reg2` to get a leaner model by removing variables which do not significantly improve model outcomes. The result is `reg2.1`. However, the result was disappointing as the `reg2.1` was not statistically better than any of the previous models. 
+
+Using our best performing model yet, `reg 1.1`, we will create another model `reg1.2` with **log transform** response time as the dependent variable. The results from `reg1.2` was the statistically best among the 5 regression models - with the highest **adjusted R^2** and mean absolute error from out test set at 2.59, which is the smallest among the five models. Comparing results from the five models, we concluded that `reg1.2` is our final model. 
+
+### 4.2 Final Model
+
+Summary table of our final model `reg1.2` is below. Most of the variables showed statistical significance, with the exception of **Precipitation** and some categorical variables in **days of the week**, **week**, and **3 hour time bins**. 
+
+```{r, final_model, echo=FALSE, message=FALSE, warning=FALSE}
 pretty_lm <- prettify(summary(reg1.2))
 kbl(pretty_lm, caption ="<b>Summary of final model (reg1.2) <b>") %>%
   kable_paper(c("hover", "condensed"), full_width = T, html_font = "Avenir") %>%
-  kable_styling (bootstrap_options = "striped", "condensed", font_size = 9) %>%
+  kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
   row_spec(0, bold = T, color = "white", background = "#2e4057", font_size = 10) %>%
   column_spec(1, bold = T)  %>%
   scroll_box(width = "100%", height = "400px")
 ```
 
+Using the final model, the **MAE of the Training set** comes out to be **2.598714** and **2.520527** for the **testing set**. The charts below show that our final underpredicts the response time of the EMS calls on both testing and training sets. The red line represents the one-to-one line and you can see that the model's predictions fall under the line, meaning underprediction. 
 
-```{r}
-kbl(cat("Train MAE: ", (vb_training.reg1.2_MAE), " \n","Test MAE: ", (vb_test.reg1.2_MAE)) %>%
-      column_spec(1, bold = T))
-
+```{r, message=FALSE, warning=FALSE}
 #Plotting accuracy metrics
 preds.train <- data.frame(pred   = vb_training.reg1.2$ResponseTime.Predict,
                           actual = vb_training.reg1.2$ResponseTime,
@@ -1669,36 +1676,37 @@ preds <- rbind(preds.train, preds.test)
 
 ggplot(preds, aes(x = actual, y = pred, color = source)) +
   geom_point() +
-  scale_fill_manual(values = palette5) +
+  scale_fill_manual(values = palette2) +
   geom_smooth(method = "lm", color = "green") +
-  geom_abline(color = "orange") +
+  geom_abline(color = "red") +
   coord_equal() +
   theme_bw() +
-  facet_wrap(~source, ncol = 2) +
+  facet_wrap(~source, nrow = 2) +
   labs(title = "Comparing predictions to actual ResponeTime for the test set and the training set",
        caption="Predicted ResponeTime as a Function of Observed ResponseTime for the Test Set and the Training Set",
        x = "Actual ResponseTime",
        y = "Predicted Response") +
   plotTheme +
   theme(
-    legend.position = "none"
-  )
+    legend.position = "none")
 
-ggplot(preds, aes(x = actual, y = pred)) +
-  geom_point() +
-  geom_smooth(method = "lm", color = "green") +
-  geom_abline(color = "orange") +
-  coord_equal() +
-  theme_bw() +
-  labs(title = "Comparing predictions to actual response times for all calls",
-       caption="Predicted response time as a Function of Observed response time",
-       x = "Actual ResponseTime",
-       y = "Predicted ResponseTime") +
-  plotTheme
+#ggplot(preds, aes(x = actual, y = pred)) +
+#  geom_point() +
+#  geom_smooth(method = "lm", color = "green") +
+#  geom_abline(color = "orange") +
+#  coord_equal() +
+#  theme_bw() +
+#  labs(title = "Comparing predictions to actual response times for all calls",
+#       caption="Predicted response time as a Function of Observed response time",
+#       x = "Actual ResponseTime",
+#       y = "Predicted ResponseTime") +
+#  plotTheme
 ```
 # 5. Cross Validation
-```{r, cross validation}
-#Generalizability - cross validation
+
+To test the generalizability **random 100-fold** method was conducted with the final model (`reg1.2`).
+
+```{r, message=FALSE, warning=FALSE, cache=TRUE, results= 'hide'}
 fitControl <- trainControl(method = "cv", number = 100, savePredictions = TRUE)
 set.seed(825)
 
@@ -1757,11 +1765,12 @@ reg.cv <-
                            StrongWind) %>%
           dplyr::filter(is.infinite(log_ResponseTime) == FALSE), 
         method = "lm", trControl = fitControl, na.action = na.pass)
-
-reg.cv
-
 reg.cv$resample
+```
 
+The plots below show the result of the 100 fold cross validation process. **Mean absolute Error (MAE)**, **root-mean-square deviation (RMSE)**, and **Rsquared** of the 100 folds seem to cluster except for a few outliers. This indicates that our final model can be generalizable to new data. 
+
+```{r, message=FALSE, warning=FALSE}
 reg.cv$resample %>% 
   pivot_longer(-Resample) %>% 
   mutate(name = as.factor(name)) %>% 
@@ -1769,25 +1778,31 @@ reg.cv$resample %>%
   geom_jitter(width = 0.1) +
   facet_wrap(~name, ncol = 3, scales = "free") +
   theme_bw() +
-  theme(
-    legend.position = "none"
-  )
+  theme(legend.position = "none") +
+  plotTheme
+```
 
+The normal distribution of the MAE of the 100 fold test also confirms that the model can be generalizable to new data with some errors. 
+
+```{r, message=FALSE, warning=FALSE}
 reg.cv.dataframe<-
   reg.cv$resample %>% 
   dplyr::select(MAE) %>%
   data.frame()
 
 
+#Distribution of Mean Average Error from 100 Fold Test
 ggplot(reg.cv.dataframe, aes(x=MAE)) +
   geom_histogram(fill = "darkblue") +
   labs(title="Distribution of Mean Average Error from 100 Fold Test",
        x="Mean Average Error", 
        y="Frequency")+
   plotTheme
+```
 
+Also the final maps shows the response time error on the out of fold sets. It shows that the errors
 
-
+```{r, include=FALSE, message=FALSE, warning=FALSE}
 # extract predictions from CV object
 cv_preds <- reg.cv$pred
 nrow(main_ems.sf)
@@ -1804,44 +1819,20 @@ st_crs(map_preds) <- st_crs(vb_tracts)
 
 # plot errors on a map
 ggplot() +
-  geom_sf(data = vb_tracts, fill = "grey40") +
-  geom_sf(data = map_preds, aes(colour = q5(ResponseTime.AbsError)),
-          show.legend = "point", size = 1) +
-  scale_colour_manual(values = palette5,
+  geom_sf(data = vb_boundary, fill = "black") +
+  geom_sf(data = map_preds, aes(colour = q5(ResponseTime.AbsError),na.rm=TRUE),
+          show.legend = "point", size = 0.00005) +
+  scale_colour_manual(values = palette6,
                       labels=qBr(map_preds,"ResponseTime.AbsError"),
                       name="Quintile\nBreaks") +
   labs(title="Absolute Response time errors on the OOF set",
        subtitle = "OOF = 'Out Of Fold'") +
   mapTheme
-
-#errors
-vb_test <-
-  vb_test %>%
-  mutate(Regression = "Baseline Regression",
-         ResponseTime.Predict = ifelse((predict(reg_final_train, vb_test)) < 0, mean(vb_training$ResponseTime), predict(reg_final_train, vb_test)),
-         ResponseTime.Error = ResponseTime.Predict - ResponseTime,
-         ResponseTime.AbsError = abs(ResponseTime.Predict - ResponseTime),
-         ResponseTime.APE = (abs(ResponseTime.Predict - ResponseTime)) / abs(ResponseTime.Predict))%>%
-  mutate(ResponseTime.AbsError = replace_na(ResponseTime.AbsError, 0))%>%
-  mutate(ResponseTime.Error=replace_na(ResponseTime.Error, 0))
-
-
-
-summary(vb_test$ResponseTime.AbsError)
-summary(vb_test$ResponseTime.APE)
-
-#table of MAE and MAPE for single test set
-vb_test%>%
-  st_drop_geometry()%>%
-  summarize(Mean_Absolute_Error = mean(ResponseTime.AbsError, na.rm = T),
-            Mean_Absolute_Percentage_Error=mean(ResponseTime.APE, na.rm=T)) %>%
-  dplyr::select(Mean_Absolute_Error, Mean_Absolute_Percentage_Error)%>%
-  kable(caption = "Figure x. Mean Absolute Error and Mean Absolute Percentage Error for the Test Set") %>%
-  kable_styling("striped", full_width = F)
 ```
-
 
 # 6. Conclusion
 
-Ability to predict response time of a EMS call can be a helpful tool for many 
+As discussed in the introduction, the purpose of this project is to amplify the presence of shared information in the event of a medical emergency by providing an estimated time of arrival for emergency medical services (EMS). We have used a series of features, ranging from temporal to spatial to demographic data, to come up with a model that can help predict the response time of an EMS. Incorporating additional features like network distances to EMS stations may improve the model in predicting the response time of EMS calls. 
+
+
 
