@@ -432,7 +432,7 @@ kbl(nn_table , caption ="<b>Eengineered spatial features<b>") %>%
   column_spec(1, bold = T)
 ```
 
-```{r, loading map files, message=FALSE, warning=FALSE}
+```{r, loading map files, message=FALSE, warning=FALSE, echo=FALSE}
 # load VB boundary census tracts
 vb_boundary <-
   st_read("https://gismaps.vbgov.com/arcgis/rest/services/Basemaps/Administrative_Boundaries/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json") %>%
@@ -1800,36 +1800,6 @@ ggplot(reg.cv.dataframe, aes(x=MAE)) +
        x="Mean Average Error", 
        y="Frequency")+
   plotTheme
-```
-
-Also the final maps shows the response time error on the out of fold sets. It shows that the errors
-
-```{r, include=FALSE, message=FALSE, warning=FALSE}
-# extract predictions from CV object
-cv_preds <- reg.cv$pred
-nrow(main_ems.sf)
-nrow(cv_preds)
-
-#Create dataset with "out of fold" predictions and original data
-map_preds <- main_ems.sf %>% 
-  rowid_to_column(var = "rowIndex") %>% 
-  left_join(cv_preds, by = "rowIndex") %>% 
-  mutate(ResponseTime.AbsError = abs(pred - ResponseTime)) %>% 
-  cbind(st_coordinates((.)))
-
-st_crs(map_preds) <- st_crs(vb_tracts)
-
-# plot errors on a map
-ggplot() +
-  geom_sf(data = vb_boundary, fill = "black") +
-  geom_sf(data = map_preds, aes(colour = q5(ResponseTime.AbsError),na.rm=TRUE),
-          show.legend = "point", size = 0.00005) +
-  scale_colour_manual(values = palette6,
-                      labels=qBr(map_preds,"ResponseTime.AbsError"),
-                      name="Quintile\nBreaks") +
-  labs(title="Absolute Response time errors on the OOF set",
-       subtitle = "OOF = 'Out Of Fold'") +
-  mapTheme
 ```
 
 # 6. Conclusion
