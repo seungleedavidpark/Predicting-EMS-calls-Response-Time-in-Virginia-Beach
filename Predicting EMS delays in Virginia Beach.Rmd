@@ -24,6 +24,8 @@ Knowing the potential response time for an ambulance is important because it all
 
 The project proposes to use this information in a new mobile-phone application called **MyEMS**. The app allows users to select their medical emergency, visualize all the different ways they can reach care and then request an ambulance or receive driving directions to the nearest hospital. They will also be able to immediately get connected with a medical staff via telemedicine while they wait for care.
 
+You can also watch our presentation about the project here: https://www.youtube.com/watch?v=e-DnK3K7Ehk&feature=youtu.be
+
 ![](wireframe1.png)
 
 ![](wireframe2.png)
